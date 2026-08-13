@@ -110,6 +110,16 @@ classdef MggpModel
             y = predictFreeRun(theta, obj.compile(), y0, inputs);
         end
 
+        function mse = avaliarFitness(obj, theta, vars)
+            %AVALIARFITNESS Atalho para a funcao solta SCOREOSA(theta,
+            %   obj.compile(), vars) — erro one-step-ahead, usado como
+            %   fitness padrao pelo loop evolutivo (ver EVOLUIR).
+            %
+            %   Nome deliberadamente diferente de 'scoreOsa' — mesmo
+            %   motivo de ESTIMARTHETA/SIMULARFREERUN acima.
+            mse = scoreOsa(theta, obj.compile(), vars, obj.maiorAtraso());
+        end
+
         function s = toString(obj)
             %TOSTRING Representacao textual do modelo completo, um termo
             %   por linha (util para inspecao/log).

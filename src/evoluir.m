@@ -31,6 +31,16 @@ function [melhorModelo, melhorTheta, historico] = evoluir(config)
 %                             populacao inicial (default 3).
 %       verbose              - true para imprimir estatisticas por
 %                             geracao (default true).
+%       usarParfor           - true para paralelizar a avaliacao de
+%                             fitness (o gargalo real do loop) via
+%                             PARFOR, em vez de FOR sequencial (default
+%                             false). Exige o Parallel Computing
+%                             Toolbox instalado; se nao estiver
+%                             disponivel, MATLAB lanca erro claro ao
+%                             tentar abrir o parpool — nao ha fallback
+%                             silencioso automatico aqui de proposito
+%                             (silenciar esse erro esconderia que a
+%                             paralelizacao pedida nao aconteceu).
 %
 %   SAIDAS
 %     melhorModelo - MggpModel de menor fitness (OSA) encontrado.
@@ -54,7 +64,7 @@ function [melhorModelo, melhorTheta, historico] = evoluir(config)
     config = aplicarDefaults(config);
 
     populacao = inicializarPopulacao(config);
-    fitnessPop = avaliarPopulacao(populacao, config.vars);
+    fitnessPop = avaliarPopulacao(populacao, config.vars, config.usarParfor);
 
     historico = struct('geracao', {}, 'melhorFitness', {}, 'fitnessMedio', {});
 
@@ -106,7 +116,8 @@ function config = aplicarDefaults(config)
         'tamanhoTorneio', 3, ...
         'elite', 0.05, ...
         'numTermosInicial', 3, ...
-        'verbose', true);
+        'verbose', true, ...
+        'usarParfor', false);
 
     nomesDefaults = fieldnames(defaults);
     for i = 1:numel(nomesDefaults)
@@ -127,11 +138,47 @@ function populacao = inicializarPopulacao(config)
     end
 end
 
-function fitnessPop = avaliarPopulacao(populacao, vars)
+function fitnessPop = avaliarPopulacao(populacao, vars, usarParfor)
 %AVALIARPOPULACAO Calcula o fitness (OSA) de cada individuo da populacao.
-    fitnessPop = zeros(1, numel(populacao));
-    for i = 1:numel(populacao)
-        fitnessPop(i) = avaliarIndividuo(populacao(i), vars);
+%
+%   Este e o gargalo real do loop evolutivo: cada avaliacao (LS + OSA)
+%   e independente das demais (nenhum individuo le/escreve estado
+%   compartilhado), o que a torna um candidato direto para PARFOR sem
+%   reestruturar nada — condicao necessaria para paralelizar um loop
+%   com parfor (cada iteracao deve ser independente das outras).
+%
+%   usarParfor (opcional, default false): se true, usa parfor em vez de
+%   for. Default false porque parfor exige o Parallel Computing Toolbox
+%   e abrir um parpool (custo fixo de alguns segundos na primeira
+%   chamada) — para populacoes pequenas ou uma unica execucao rapida de
+%   teste, o overhead de abrir o pool pode superar o ganho. Ver
+%   EVOLUIR para como habilitar via config.usarParfor.
+%
+%   ATENCAO — REPRODUTIBILIDADE: workers de parfor usam gerador de
+%   numeros aleatorios PROPRIO, independente do rng() do processo
+%   cliente. Isso so e seguro aqui porque AVALIARINDIVIDUO (chamada por
+%   este loop) e inteiramente deterministico — nenhum RAND dentro dela.
+%   Se um dia essa funcao ganhar qualquer componente estocastico,
+%   reprodutibilidade entre execucoes com o mesmo seed deixa de ser
+%   garantida dentro do parfor (ver
+%   https://www.mathworks.com/help/parallel-computing/control-random-number-streams-on-workers.html
+%   para como lidar com isso caso vire necessario).
+
+    if nargin < 3
+        usarParfor = false;
+    end
+
+    n = numel(populacao);
+    fitnessPop = zeros(1, n);
+
+    if usarParfor
+        parfor i = 1:n
+            fitnessPop(i) = avaliarIndividuo(populacao(i), vars); %#ok<PFBNS>
+        end
+    else
+        for i = 1:n
+            fitnessPop(i) = avaliarIndividuo(populacao(i), vars);
+        end
     end
 end
 
@@ -151,6 +198,15 @@ end
 function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, config)
 %PROXIMAGERACAO Produz a proxima geracao: elitismo + reproducao
 %   (selecao por torneio, crossover, mutacao) ate completar popSize.
+%
+%   Deliberadamente separada em duas fases — (1) gerar todos os filhos,
+%   depois (2) avaliar todos os filhos — em vez de avaliar cada filho
+%   logo apos gera-lo. A geracao de filho (selecao + crossover +
+%   mutacao) e sequencial por natureza (usa RAND, que nao e
+%   thread-safe/reprodutivel de forma trivial dentro de PARFOR); a
+%   avaliacao (LS + OSA) e o custo real e e independente por filho —
+%   so essa fase se beneficia de PARFOR. Juntar as duas fases impediria
+%   paralelizar a que realmente importa.
 
     n = numel(populacao);
     numElite = max(0, round(config.elite * n));
@@ -158,10 +214,13 @@ function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, co
     [~, ordemPorFitness] = sort(fitnessPop, 'ascend');
     idxElite = ordemPorFitness(1:numElite);
 
-    novaPopulacao = populacao(idxElite);
-    novoFitness = fitnessPop(idxElite);
+    elitePopulacao = populacao(idxElite);
+    eliteFitness = fitnessPop(idxElite);
 
-    while numel(novaPopulacao) < n
+    % Fase 1 (sequencial): gera todos os filhos que faltam.
+    numFilhosNecessarios = n - numElite;
+    filhos = MggpModel.empty;
+    while numel(filhos) < numFilhosNecessarios
         pai1 = selecionarPorTorneio(populacao, fitnessPop, config.tamanhoTorneio);
         pai2 = selecionarPorTorneio(populacao, fitnessPop, config.tamanhoTorneio);
 
@@ -179,14 +238,17 @@ function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, co
             filho2 = mutarModelo(filho2, config.nomesEntradas, config.maxDelay, config.maxFatoresPorTermo);
         end
 
-        novaPopulacao = [novaPopulacao, filho1]; %#ok<AGROW>
-        novoFitness = [novoFitness, avaliarIndividuo(filho1, config.vars)]; %#ok<AGROW>
-
-        if numel(novaPopulacao) < n
-            novaPopulacao = [novaPopulacao, filho2]; %#ok<AGROW>
-            novoFitness = [novoFitness, avaliarIndividuo(filho2, config.vars)]; %#ok<AGROW>
+        filhos = [filhos, filho1]; %#ok<AGROW>
+        if numel(filhos) < numFilhosNecessarios
+            filhos = [filhos, filho2]; %#ok<AGROW>
         end
     end
+
+    % Fase 2 (pode ser paralela): avalia todos os filhos de uma vez.
+    fitnessFilhos = avaliarPopulacao(filhos, config.vars, config.usarParfor);
+
+    novaPopulacao = [elitePopulacao, filhos];
+    novoFitness = [eliteFitness, fitnessFilhos];
 end
 
 function selecionado = selecionarPorTorneio(populacao, fitnessPop, tamanhoTorneio)

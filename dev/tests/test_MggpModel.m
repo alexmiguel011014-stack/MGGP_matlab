@@ -48,10 +48,10 @@ function test_MggpModel()
     u = randn(N, 1);
     y0 = zeros(2, 1);
 
-    y = modelo.simularFreeRun(thetaVerdadeiro, y0, u);
+    y = modelo.simularFreeRun(thetaVerdadeiro, y0, struct('u', u));
     ySimulado = y(3:end); % remove prefixo de y0 (2 amostras)
 
-    thetaReestimado = modelo.estimarTheta(ySimulado, u);
+    thetaReestimado = modelo.estimarTheta(struct('y', ySimulado, 'u', u));
     erro = abs(thetaReestimado - thetaVerdadeiro);
     tolerancia = 1e-8;
 

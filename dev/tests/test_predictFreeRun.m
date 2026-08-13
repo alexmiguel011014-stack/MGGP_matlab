@@ -24,7 +24,8 @@ function test_predictFreeRun()
     u = randn(N, 1); % u(1) = instante 0 em diante (ver convencao no cabecalho de predictFreeRun)
     y0 = zeros(2, 1); % duas condicoes iniciais, pois maxLagUsado = 2
 
-    yComPrefixo = predictFreeRun(thetaVerdadeiro, terms, y0, u);
+    inputs = struct('u', u);
+    yComPrefixo = predictFreeRun(thetaVerdadeiro, terms, y0, inputs);
 
     % checagem 1: causalidade -- as duas primeiras amostras devem ser
     % exatamente y0, sem alteracao pela simulacao.
@@ -40,7 +41,8 @@ function test_predictFreeRun()
 
     % checagem 2: round-trip com ls -- reestima theta a partir da saida
     % simulada e confere que bate com o valor usado para gerar os dados.
-    thetaReestimado = ls(ySimulado, u, terms);
+    vars = struct('y', ySimulado, 'u', u);
+    thetaReestimado = ls(vars, terms);
     erro = abs(thetaReestimado - thetaVerdadeiro);
     tolerancia = 1e-8;
 

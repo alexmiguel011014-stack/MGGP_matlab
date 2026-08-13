@@ -1,25 +1,32 @@
-function P = makeRegressors(y, u, terms, maxDelay)
-%MAKEREGRESSORS Monta a matriz de regressores de um modelo NARX.
+function P = makeRegressors(vars, terms, maxDelay)
+%MAKEREGRESSORS Monta a matriz de regressores de um modelo NARX (SISO ou MISO).
 %
-%   P = MAKEREGRESSORS(y, u, terms, maxDelay) monta a matriz de
-%   regressores P a partir dos sinais de saida y e entrada u, aplicando
-%   os termos descritos em TERMS (com atraso), alinhados em amostras
-%   validas (a partir de maxDelay+1).
+%   P = MAKEREGRESSORS(vars, terms, maxDelay) monta a matriz de
+%   regressores P a partir das series em VARS, aplicando os termos
+%   descritos em TERMS (com atraso), alinhados em amostras validas.
 %
 %   Espelha mggpElement.makeRegressors da biblioteca Python original
-%   (CastroHc/MGGP), no modo 'default' (sem MA/ruido).
+%   (CastroHc/MGGP), no modo 'default' (sem MA/ruido), generalizado para
+%   MISO (numero arbitrario de variaveis de entrada, nao so 'y'/'u'
+%   fixos).
 %
 %   ENTRADAS
-%     y        - vetor coluna Nx1, saida medida do sistema.
-%     u        - vetor coluna Nx1, entrada do sistema.
+%     vars     - struct de series de tempo, cada campo um vetor coluna
+%                Nx1 do MESMO tamanho. Deve conter pelo menos o campo
+%                'y' (saida do sistema). Os demais campos sao as
+%                variaveis de entrada, com qualquer nome (ex: vars.y,
+%                vars.u1, vars.h1 — mesma convencao de nomes da
+%                biblioteca original, sufixo '1' sugerido mas nao
+%                exigido).
 %     terms    - cell array de strings, cada uma um termo do modelo.
 %                Sintaxe suportada:
-%                  'q<k>(y)'        -> y atrasado k amostras: y(t-k)
-%                  'q<k>(u)'        -> u atrasado k amostras: u(t-k)
-%                  'q<k>(y)*q<j>(u)' -> produto de dois regressores
-%                  '1'              -> termo constante
-%                Exemplo: {'q2(y)', 'q1(u)', 'q2(y)*q1(u)'} representa
-%                y(k-2), u(k-1), y(k-2)*u(k-1).
+%                  'q<k>(<nomeVar>)'  -> variavel atrasada k amostras
+%                  '<nomeVar>'        -> variavel sem atraso
+%                  '<fator>*<fator>'  -> produto de fatores (2 ou mais)
+%                  '1'                -> termo constante
+%                <nomeVar> deve ser um campo existente em VARS.
+%                Exemplo: {'q2(y)', 'q1(u1)', 'q2(y)*q1(u1)'} representa
+%                y(k-2), u1(k-1), y(k-2)*u1(k-1).
 %     maxDelay - atraso maximo considerado no primitive set (usado so
 %                para validar que nenhum termo excede o combinado com o
 %                resto do motor de GP; nao afeta o calculo em si).
@@ -27,28 +34,33 @@ function P = makeRegressors(y, u, terms, maxDelay)
 %   SAIDA
 %     P - matriz de regressores, (N - maxLagUsado) x numel(terms).
 %         Cada coluna corresponde a um termo de TERMS, alinhada nas
-%         mesmas amostras (as primeiras maxLagUsado amostras de y/u sao
-%         descartadas por nao terem historico suficiente).
+%         mesmas amostras (as primeiras maxLagUsado amostras de cada
+%         serie sao descartadas por nao terem historico suficiente).
 %
 %   Ver tambem: LS, PREDICTFREERUN
 
-    if nargin < 4
+    if nargin < 3
         maxDelay = Inf;
     end
 
-    y = y(:);
-    u = u(:);
-    if numel(y) ~= numel(u)
-        error('makeRegressors:tamanhoInvalido', ...
-            'y e u devem ter o mesmo numero de amostras.');
+    if ~isfield(vars, 'y')
+        error('makeRegressors:campoYObrigatorio', ...
+            'vars deve ter pelo menos o campo ''y'' (saida do sistema).');
+    end
+
+    nomesVars = fieldnames(vars);
+    N = numel(vars.y(:));
+    for i = 1:numel(nomesVars)
+        vars.(nomesVars{i}) = vars.(nomesVars{i})(:);
+        if numel(vars.(nomesVars{i})) ~= N
+            error('makeRegressors:tamanhoInvalido', ...
+                'Todas as series em vars devem ter o mesmo numero de amostras (campo "%s" difere).', ...
+                nomesVars{i});
+        end
     end
 
     numTerms = numel(terms);
     lagsUsados = zeros(numTerms, 1);
-
-    % Primeira passada: descobre o maior atraso usado em qualquer termo,
-    % para saber quantas amostras iniciais descartar (todas as colunas
-    % precisam estar alinhadas na mesma janela de tempo valida).
     for i = 1:numTerms
         lagsUsados(i) = maiorAtrasoDoTermo(terms{i});
     end
@@ -60,7 +72,6 @@ function P = makeRegressors(y, u, terms, maxDelay)
             maxLagUsado, maxDelay);
     end
 
-    N = numel(y);
     numAmostrasValidas = N - maxLagUsado;
     if numAmostrasValidas <= 0
         error('makeRegressors:dadosInsuficientes', ...
@@ -70,7 +81,7 @@ function P = makeRegressors(y, u, terms, maxDelay)
 
     P = zeros(numAmostrasValidas, numTerms);
     for i = 1:numTerms
-        P(:, i) = avaliaTermo(terms{i}, y, u, maxLagUsado, numAmostrasValidas);
+        P(:, i) = avaliaTermo(terms{i}, vars, maxLagUsado, numAmostrasValidas);
     end
 end
 
@@ -82,14 +93,14 @@ function lag = maiorAtrasoDoTermo(termo)
     end
     atrasos = regexp(termo, 'q(\d+)\(', 'tokens');
     if isempty(atrasos)
-        lag = 0; % termo sem atraso, ex: 'u' puro
+        lag = 0; % termo sem atraso, ex: 'u1' puro
     else
         valores = cellfun(@(c) str2double(c{1}), atrasos);
         lag = max(valores);
     end
 end
 
-function coluna = avaliaTermo(termo, y, u, maxLagUsado, numAmostrasValidas)
+function coluna = avaliaTermo(termo, vars, maxLagUsado, numAmostrasValidas)
 %AVALIATERMO Avalia um unico termo do modelo em todas as amostras validas.
 %   Amostras validas comecam no indice (maxLagUsado + 1) da serie
 %   original, para que todo termo tenha historico suficiente.
@@ -102,36 +113,41 @@ function coluna = avaliaTermo(termo, y, u, maxLagUsado, numAmostrasValidas)
         return;
     end
 
-    % Suporta produto de até dois fatores separados por '*'.
     fatores = strsplit(termo, '*');
     coluna = ones(numAmostrasValidas, 1);
     for k = 1:numel(fatores)
-        coluna = coluna .* avaliaFator(strtrim(fatores{k}), y, u, idxInicio, idxFim);
+        coluna = coluna .* avaliaFator(strtrim(fatores{k}), vars, idxInicio, idxFim);
     end
 end
 
-function valores = avaliaFator(fator, y, u, idxInicio, idxFim)
-%AVALIAFATOR Avalia um único fator (ex: 'q2(y)' ou 'u') na janela [idxInicio, idxFim].
-    tok = regexp(fator, '^q(\d+)\((y|u)\)$', 'tokens', 'once');
+function valores = avaliaFator(fator, vars, idxInicio, idxFim)
+%AVALIAFATOR Avalia um unico fator (ex: 'q2(y)' ou 'u1') na janela [idxInicio, idxFim].
+    tok = regexp(fator, '^q(\d+)\((\w+)\)$', 'tokens', 'once');
     if ~isempty(tok)
         atraso = str2double(tok{1});
-        variavel = tok{2};
-        if strcmp(variavel, 'y')
-            serie = y;
-        else
-            serie = u;
-        end
+        nomeVar = tok{2};
+        serie = obterSerie(vars, nomeVar);
         valores = serie((idxInicio - atraso):(idxFim - atraso));
         return;
     end
 
-    switch fator
-        case 'y'
-            valores = y(idxInicio:idxFim);
-        case 'u'
-            valores = u(idxInicio:idxFim);
-        otherwise
-            error('makeRegressors:termoInvalido', ...
-                'Termo nao reconhecido: "%s". Use q<k>(y), q<k>(u), y, u ou "1".', fator);
+    % variavel sem atraso: precisa ser um nome de campo valido de vars.
+    if isfield(vars, fator)
+        serie = vars.(fator);
+        valores = serie(idxInicio:idxFim);
+        return;
     end
+
+    error('makeRegressors:termoInvalido', ...
+        'Termo nao reconhecido: "%s". Use q<k>(<var>), <var> (campo existente em vars) ou "1".', fator);
+end
+
+function serie = obterSerie(vars, nomeVar)
+%OBTERSERIE Busca a serie de uma variavel em vars, com erro claro se nao existir.
+    if ~isfield(vars, nomeVar)
+        error('makeRegressors:variavelDesconhecida', ...
+            'Variavel "%s" nao encontrada em vars. Campos disponiveis: %s.', ...
+            nomeVar, strjoin(fieldnames(vars), ', '));
+    end
+    serie = vars.(nomeVar);
 end

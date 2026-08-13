@@ -1,14 +1,16 @@
-function [theta, P, yAlinhado] = ls(y, u, terms, maxDelay)
-%LS Estima os parametros de um modelo NARX por minimos quadrados.
+function [theta, P, yAlinhado] = ls(vars, terms, maxDelay)
+%LS Estima os parametros de um modelo NARX (SISO ou MISO) por minimos quadrados.
 %
-%   THETA = LS(y, u, terms, maxDelay) monta a matriz de regressores via
+%   THETA = LS(vars, terms, maxDelay) monta a matriz de regressores via
 %   MAKEREGRESSORS e resolve theta = (P'P)^-1 P'y (via mldivide, mais
 %   estavel numericamente que a inversa explicita).
 %
 %   Espelha mggpElement.ls da biblioteca Python original (CastroHc/MGGP).
 %
 %   ENTRADAS
-%     y, u, terms, maxDelay - mesmos argumentos de MAKEREGRESSORS.
+%     vars, terms, maxDelay - mesmos argumentos de MAKEREGRESSORS. vars
+%         deve conter o campo 'y' (saida) e um campo por variavel de
+%         entrada usada em TERMS.
 %
 %   SAIDAS
 %     theta     - vetor coluna numel(terms)x1 com os parametros estimados.
@@ -19,13 +21,13 @@ function [theta, P, yAlinhado] = ls(y, u, terms, maxDelay)
 %
 %   Ver tambem: MAKEREGRESSORS, PREDICTFREERUN
 
-    if nargin < 4
+    if nargin < 3
         maxDelay = Inf;
     end
 
-    P = makeRegressors(y, u, terms, maxDelay);
+    P = makeRegressors(vars, terms, maxDelay);
 
-    y = y(:);
+    y = vars.y(:);
     numAmostrasValidas = size(P, 1);
     yAlinhado = y((end - numAmostrasValidas + 1):end);
 

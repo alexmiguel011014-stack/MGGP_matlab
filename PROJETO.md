@@ -40,8 +40,20 @@ Programming) para MATLAB puro, para entregar o projeto pronto ao professor.
 
 ## Status
 
-Ainda não feito: nenhum arquivo do projeto MATLAB foi criado — só o planejamento e a
-pesquisa até agora.
+Feito (passos 1-3 do plano, código escrito e commitado, lógica validada em Python mas
+**nunca rodada em MATLAB de verdade ainda**):
+- `src/makeRegressors.m` + `src/ls.m` — núcleo numérico (mínimos quadrados).
+- `src/predictFreeRun.m` — simulação free-run.
+- `src/MggpTerm.m` + `src/MggpModel.m` — representação de árvore/modelo.
+- Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`.
+
+**Pendência crítica**: nenhum teste foi executado no MATLAB real. Um ponto específico
+sinalizado como risco (concatenação de array vazio em `MggpTerm.produto`) só se
+confirma rodando. Rodar os 3 testes é pré-requisito de fato antes de confiar no que
+foi construído até aqui.
+
+Não feito ainda: passos 4-7 (operadores genéticos, loop evolutivo, paralelismo,
+NSGA-II).
 
 ## Notas fora do escopo do MGGP em si
 

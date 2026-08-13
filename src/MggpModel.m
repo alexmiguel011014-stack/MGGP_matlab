@@ -79,10 +79,12 @@ classdef MggpModel
             n = numel(obj.termos);
         end
 
-        function [theta, P, yAlinhado] = estimarTheta(obj, y, u)
-            %ESTIMARTHETA Atalho para a funcao solta LS(y, u,
+        function [theta, P, yAlinhado] = estimarTheta(obj, vars)
+            %ESTIMARTHETA Atalho para a funcao solta LS(vars,
             %   obj.compile()) — estima os parametros do modelo a partir
-            %   de dados observados.
+            %   de dados observados. vars e um struct com o campo 'y'
+            %   (saida) e um campo por variavel de entrada usada no
+            %   modelo (ver MAKEREGRESSORS).
             %
             %   Nome deliberadamente diferente de 'ls' (a funcao solta em
             %   src/ls.m): um metodo de classdef com o mesmo nome de uma
@@ -92,19 +94,20 @@ classdef MggpModel
             %   dependendo da versao/contexto) — sem MATLAB disponivel
             %   para testar o caso na pratica, o mais seguro e nao correr
             %   esse risco.
-            [theta, P, yAlinhado] = ls(y, u, obj.compile(), obj.maiorAtraso());
+            [theta, P, yAlinhado] = ls(vars, obj.compile(), obj.maiorAtraso());
         end
 
-        function y = simularFreeRun(obj, theta, y0, u)
+        function y = simularFreeRun(obj, theta, y0, inputs)
             %SIMULARFREERUN Atalho para a funcao solta PREDICTFREERUN
-            %   (theta, obj.compile(), y0, u) — simula o modelo com
-            %   theta dado.
+            %   (theta, obj.compile(), y0, inputs) — simula o modelo com
+            %   theta dado. inputs e um struct com um campo por variavel
+            %   de entrada usada no modelo (ver PREDICTFREERUN).
             %
             %   Nome deliberadamente diferente de 'predictFreeRun' (a
             %   funcao solta em src/predictFreeRun.m) — mesmo motivo de
             %   ESTIMARTHETA acima: evitar qualquer ambiguidade entre
             %   metodo e funcao-arquivo de mesmo nome.
-            y = predictFreeRun(theta, obj.compile(), y0, u);
+            y = predictFreeRun(theta, obj.compile(), y0, inputs);
         end
 
         function s = toString(obj)

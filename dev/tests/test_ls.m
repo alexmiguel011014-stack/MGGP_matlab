@@ -32,7 +32,8 @@ function test_ls()
              + thetaVerdadeiro(3) * y(k-2) * u(k-1);
     end
 
-    thetaEstimado = ls(y, u, terms);
+    vars = struct('y', y, 'u', u);
+    thetaEstimado = ls(vars, terms);
 
     erro = abs(thetaEstimado - thetaVerdadeiro);
     tolerancia = 1e-8; % sem ruido no sistema, deve recuperar quase exato

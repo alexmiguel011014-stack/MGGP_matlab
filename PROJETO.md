@@ -40,20 +40,25 @@ Programming) para MATLAB puro, para entregar o projeto pronto ao professor.
 
 ## Status
 
-Feito (passos 1-3 do plano, código escrito e commitado, lógica validada em Python mas
+Feito (passos 1-4 do plano, código escrito e commitado, lógica validada em Python mas
 **nunca rodada em MATLAB de verdade ainda**):
-- `src/makeRegressors.m` + `src/ls.m` — núcleo numérico (mínimos quadrados).
-- `src/predictFreeRun.m` — simulação free-run.
-- `src/MggpTerm.m` + `src/MggpModel.m` — representação de árvore/modelo.
-- Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`.
+- `src/makeRegressors.m` + `src/ls.m` — núcleo numérico (mínimos quadrados), **MISO**
+  (número arbitrário de variáveis de entrada nomeadas, não só `y`/`u` fixos).
+- `src/predictFreeRun.m` — simulação free-run, também MISO.
+- `src/MggpTerm.m` + `src/MggpModel.m` — representação de árvore/modelo, MISO.
+- `src/gerarIndividuoAleatorio.m` — geração de indivíduo inicial válido.
+- `src/crossoverTermos.m` + `src/crossoverModelos.m` — crossover de 1 ponto entre
+  fatores de dois termos-pai (subtree), aplicado a nível de modelo.
+- `src/mutarTermo.m` + `src/mutarModelo.m` — mutação (trocar/adicionar/remover fator).
+- Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`,
+  `test_operadoresGeneticos.m`.
 
-**Pendência crítica**: nenhum teste foi executado no MATLAB real. Um ponto específico
-sinalizado como risco (concatenação de array vazio em `MggpTerm.produto`) só se
-confirma rodando. Rodar os 3 testes é pré-requisito de fato antes de confiar no que
-foi construído até aqui.
+**Pendência crítica**: nenhum teste foi executado no MATLAB real ainda. Rodar os 4
+testes é pré-requisito antes de confiar no que foi construído até aqui — a
+generalização para MISO reescreveu código já commitado que também nunca rodou.
 
-Não feito ainda: passos 4-7 (operadores genéticos, loop evolutivo, paralelismo,
-NSGA-II).
+Não feito ainda: passos 5-7 (loop evolutivo completo, paralelismo `parfor`/`gpuArray`,
+NSGA-II opcional).
 
 ## Notas fora do escopo do MGGP em si
 

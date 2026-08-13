@@ -40,7 +40,7 @@ Programming) para MATLAB puro, para entregar o projeto pronto ao professor.
 
 ## Status
 
-Feito (passos 1-4 do plano, código escrito e commitado, lógica validada em Python mas
+Feito (passos 1-5 do plano, código escrito e commitado, lógica validada em Python mas
 **nunca rodada em MATLAB de verdade ainda**):
 - `src/makeRegressors.m` + `src/ls.m` — núcleo numérico (mínimos quadrados), **MISO**
   (número arbitrário de variáveis de entrada nomeadas, não só `y`/`u` fixos).
@@ -50,15 +50,19 @@ Feito (passos 1-4 do plano, código escrito e commitado, lógica validada em Pyt
 - `src/crossoverTermos.m` + `src/crossoverModelos.m` — crossover de 1 ponto entre
   fatores de dois termos-pai (subtree), aplicado a nível de modelo.
 - `src/mutarTermo.m` + `src/mutarModelo.m` — mutação (trocar/adicionar/remover fator).
+- `src/scoreOsa.m` — fitness one-step-ahead, fiel ao exemplo do README original.
+- `src/evoluir.m` — loop evolutivo completo (população, seleção por torneio,
+  elitismo, crossover, mutação, histórico por geração).
 - Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`,
-  `test_operadoresGeneticos.m`.
+  `test_operadoresGeneticos.m`, `test_evoluir.m`.
 
-**Pendência crítica**: nenhum teste foi executado no MATLAB real ainda. Rodar os 4
-testes é pré-requisito antes de confiar no que foi construído até aqui — a
-generalização para MISO reescreveu código já commitado que também nunca rodou.
+**Pendência crítica, cada vez maior**: nenhum teste foi executado no MATLAB real
+ainda, em nenhuma camada — núcleo numérico, operadores genéticos, ou loop evolutivo.
+Quanto mais passos empilhados sem validação real, mais caro fica achar onde um bug
+mora se `test_evoluir` falhar. Rodar os 5 testes, na ordem em que foram escritos, é
+pré-requisito antes de qualquer passo novo.
 
-Não feito ainda: passos 5-7 (loop evolutivo completo, paralelismo `parfor`/`gpuArray`,
-NSGA-II opcional).
+Não feito ainda: passos 6-7 (paralelismo `parfor`/`gpuArray`, NSGA-II opcional).
 
 ## Notas fora do escopo do MGGP em si
 

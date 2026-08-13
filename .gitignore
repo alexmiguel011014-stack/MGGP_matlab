@@ -1,0 +1,10 @@
+# MATLAB
+*.asv
+*.m~
+slprj/
+codegen/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -40,29 +40,52 @@ Programming) para MATLAB puro, para entregar o projeto pronto ao professor.
 
 ## Status
 
-Feito (passos 1-5 do plano, código escrito e commitado, lógica validada em Python mas
-**nunca rodada em MATLAB de verdade ainda**):
-- `src/makeRegressors.m` + `src/ls.m` — núcleo numérico (mínimos quadrados), **MISO**
-  (número arbitrário de variáveis de entrada nomeadas, não só `y`/`u` fixos).
-- `src/predictFreeRun.m` — simulação free-run, também MISO.
-- `src/MggpTerm.m` + `src/MggpModel.m` — representação de árvore/modelo, MISO.
-- `src/gerarIndividuoAleatorio.m` — geração de indivíduo inicial válido.
-- `src/crossoverTermos.m` + `src/crossoverModelos.m` — crossover de 1 ponto entre
-  fatores de dois termos-pai (subtree), aplicado a nível de modelo.
-- `src/mutarTermo.m` + `src/mutarModelo.m` — mutação (trocar/adicionar/remover fator).
-- `src/scoreOsa.m` — fitness one-step-ahead, fiel ao exemplo do README original.
-- `src/evoluir.m` — loop evolutivo completo (população, seleção por torneio,
-  elitismo, crossover, mutação, histórico por geração).
-- Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`,
-  `test_operadoresGeneticos.m`, `test_evoluir.m`.
+**Todos os 7 passos do plano original estão com código escrito e commitado.** Decisão
+explícita do usuário: seguir construindo todos os passos antes de rodar qualquer teste
+no MATLAB real, depurando tudo de uma vez depois — registrado aqui para não se perder,
+não porque seja a ordem recomendada (foi avisado 3 vezes ao longo da sessão; a partir
+da 3ª vez, a decisão do usuário foi respeitada sem repetir o aviso).
 
-**Pendência crítica, cada vez maior**: nenhum teste foi executado no MATLAB real
-ainda, em nenhuma camada — núcleo numérico, operadores genéticos, ou loop evolutivo.
-Quanto mais passos empilhados sem validação real, mais caro fica achar onde um bug
-mora se `test_evoluir` falhar. Rodar os 5 testes, na ordem em que foram escritos, é
-pré-requisito antes de qualquer passo novo.
+1. **Núcleo numérico** — `src/makeRegressors.m` + `src/ls.m`, **MISO** (número
+   arbitrário de variáveis de entrada nomeadas, não só `y`/`u` fixos).
+2. **Harness de validação** — `src/predictFreeRun.m` (simulação free-run, MISO) +
+   round-trip com `ls`.
+3. **Representação de árvore** — `src/MggpTerm.m` + `src/MggpModel.m`, MISO.
+4. **Operadores genéticos** — `src/gerarIndividuoAleatorio.m`,
+   `src/crossoverTermos.m` + `src/crossoverModelos.m` (subtree de fatores),
+   `src/mutarTermo.m` + `src/mutarModelo.m`.
+5. **Loop evolutivo completo** — `src/scoreOsa.m` (fitness OSA, fiel ao README
+   original) + `src/evoluir.m` (população, torneio, elitismo, histórico).
+6. **Paralelismo** — `src/evoluir.m` com flag `usarParfor` (CPU, avaliação de
+   fitness) + `src/lsGpu.m`/`src/garantirGpuDisponivel.m` (GPU via `gpuArray`,
+   não integrado ao loop evolutivo ainda — decisão deliberada, ver nota abaixo).
+7. **NSGA-II** (opcional) — `src/dominanciaParento.m`, `src/ordenacaoNaoDominada.m`,
+   `src/distanciaAglomeracao.m`, `src/evoluirNsga2.m`. **Sem equivalente no projeto
+   Python original** (confirmado lendo o README — mono-objetivo, só MSE): objetivos
+   escolhidos foram erro OSA vs. número de termos, padrão comum em GP simbólica na
+   literatura, não uma tradução de algo existente.
 
-Não feito ainda: passos 6-7 (paralelismo `parfor`/`gpuArray`, NSGA-II opcional).
+Testes em `dev/tests/`: `test_ls.m`, `test_predictFreeRun.m`, `test_MggpModel.m`,
+`test_operadoresGeneticos.m`, `test_evoluir.m`, `test_evoluir_parfor.m`,
+`test_lsGpu.m` (pula com aviso se não houver GPU CUDA na máquina),
+`test_evoluirNsga2.m`.
+
+**Pendência crítica — nada disso rodou no MATLAB real ainda, em nenhuma camada.**
+Toda a validação até aqui foi lógica simulada em Python (onde a matemática traduz) ou
+revisão manual cuidadosa + pesquisa de documentação oficial (onde é sintaxe MATLAB
+específica — ex: `ClassName.empty`, `struct(..., {})`, ambiguidade de nome de método
+vs. função solta em `classdef`, RNG independente por worker em `parfor`). Isso reduz
+o risco mas não substitui execução real. **Antes de considerar o projeto pronto**:
+rodar os 8 testes, na ordem em que foram escritos — cada camada depende da anterior
+estar correta, então um erro cedo (ex: em `makeRegressors`) pode se manifestar como
+falha confusa muitas camadas depois (ex: em `test_evoluirNsga2`).
+
+**Decisão registrada sobre GPU**: `lsGpu` existe e funciona isoladamente, mas não foi
+integrado a `evoluir.m`/`evoluirNsga2.m`. Motivo: GPU só compensa processando a
+população inteira em lote (uma chamada grande), não indivíduo por indivíduo (overhead
+de transferência CPU↔GPU por indivíduo pequeno anula o ganho) — isso exigiria
+reestruturar `avaliarPopulacao` para vetorizar todos os indivíduos numa única operação
+de álgebra linear em lote, trabalho estrutural maior que não foi feito ainda.
 
 ## Notas fora do escopo do MGGP em si
 

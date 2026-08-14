@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        # Para repositórios públicos no GitHub.com, o MathWorks fornece MATLAB
+        # via GitHub Actions sem custo. Para repositórios privados, configure
+        # secrets.MATLAB_LICENSE_TOKEN no repositório e adicione:
+        #   with:
+        #     license-server: ${{ secrets.MATLAB_LICENSE_TOKEN }}
+
+      - name: Rodar testes
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run('run_tests.m')
+        env:
+          MATLAB_BATCH: "1"

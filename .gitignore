@@ -8,3 +8,10 @@ codegen/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# AI context artifacts
+graphify-out/
+repomix-output.xml
+
+# Secrets
+.env

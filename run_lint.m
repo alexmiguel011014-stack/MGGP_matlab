@@ -16,7 +16,11 @@ for i = 1:numel(files)
     if ~isempty(info)
         fprintf('%s:\n', files(i).name);
         for j = 1:numel(info)
-            fprintf('  linha %d: [%s] %s\n', info(j).line, info(j).id, info(j).message);
+            if isfield(info(j), 'id')
+                fprintf('  linha %d: [%s] %s\n', info(j).line, info(j).id, info(j).message);
+            else
+                fprintf('  linha %d: %s\n', info(j).line, info(j).message);
+            end
         end
         totalProblemas = totalProblemas + numel(info);
     end

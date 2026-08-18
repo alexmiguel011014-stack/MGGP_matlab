@@ -15,3 +15,6 @@ repomix-output.xml
 
 # Secrets
 .env
+
+# Benchmark results (generated data)
+dev/benchmarks/results/

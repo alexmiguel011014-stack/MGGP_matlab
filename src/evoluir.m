@@ -68,8 +68,19 @@ function [melhorModelo, melhorTheta, historico] = evoluir(config)
 
     historico = struct('geracao', {}, 'melhorFitness', {}, 'fitnessMedio', {});
 
+    if config.verbose_timing
+        tAcumFitness = 0; tAcumOper = 0; tAcumOverhead = 0;
+    end
+
     for geracao = 1:config.nGeracoes
-        [populacao, fitnessPop] = proximaGeracao(populacao, fitnessPop, config);
+        if config.verbose_timing
+            tInicioGer = tic;
+            [populacao, fitnessPop, tOper, tFitness] = proximaGeracao(populacao, fitnessPop, config);
+            tAcumOper    = tAcumOper    + tOper;
+            tAcumFitness = tAcumFitness + tFitness;
+        else
+            [populacao, fitnessPop] = proximaGeracao(populacao, fitnessPop, config);
+        end
 
         finitos = fitnessPop(isfinite(fitnessPop));
         if isempty(finitos)
@@ -89,6 +100,19 @@ function [melhorModelo, melhorTheta, historico] = evoluir(config)
             fprintf('geracao %3d | melhor fitness: %.6g | fitness medio: %.6g\n', ...
                 geracao, melhorFitnessGeracao, fitnessMedioGeracao);
         end
+
+        if config.verbose_timing
+            tAcumOverhead = tAcumOverhead + toc(tInicioGer) - tOper - tFitness;
+        end
+    end
+
+    if config.verbose_timing
+        tTotal = tAcumOper + tAcumFitness + tAcumOverhead;
+        fprintf('\n--- timing breakdown (%d geracoes) ---\n', config.nGeracoes);
+        fprintf('  fitness/LS (avaliarPopulacao): %6.2f s  (%4.1f%%)\n', tAcumFitness, 100*tAcumFitness/tTotal);
+        fprintf('  operadores geneticos (fase 1): %6.2f s  (%4.1f%%)\n', tAcumOper,    100*tAcumOper/tTotal);
+        fprintf('  overhead (sort, historico):    %6.2f s  (%4.1f%%)\n', tAcumOverhead, 100*tAcumOverhead/tTotal);
+        fprintf('  total loop: %6.2f s\n', tTotal);
     end
 
     [~, idxMelhor] = min(fitnessPop);
@@ -117,6 +141,7 @@ function config = aplicarDefaults(config)
         'elite', 0.05, ...
         'numTermosInicial', 3, ...
         'verbose', true, ...
+        'verbose_timing', false, ...
         'usarParfor', false);
 
     nomesDefaults = fieldnames(defaults);
@@ -195,7 +220,7 @@ function fitness = avaliarIndividuo(individuo, vars)
     end
 end
 
-function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, config)
+function [novaPopulacao, novoFitness, tFase1, tFase2] = proximaGeracao(populacao, fitnessPop, config)
 %PROXIMAGERACAO Produz a proxima geracao: elitismo + reproducao
 %   (selecao por torneio, crossover, mutacao) ate completar popSize.
 %
@@ -207,6 +232,8 @@ function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, co
 %   avaliacao (LS + OSA) e o custo real e e independente por filho —
 %   so essa fase se beneficia de PARFOR. Juntar as duas fases impediria
 %   paralelizar a que realmente importa.
+
+    tInicio1 = tic;
 
     n = numel(populacao);
     numElite = max(0, round(config.elite * n));
@@ -244,8 +271,12 @@ function [novaPopulacao, novoFitness] = proximaGeracao(populacao, fitnessPop, co
         end
     end
 
+    tFase1 = toc(tInicio1);
+
     % Fase 2 (pode ser paralela): avalia todos os filhos de uma vez.
+    tInicio2 = tic;
     fitnessFilhos = avaliarPopulacao(filhos, config.vars, config.usarParfor);
+    tFase2 = toc(tInicio2);
 
     novaPopulacao = [elitePopulacao, filhos];
     novoFitness = [eliteFitness, fitnessFilhos];

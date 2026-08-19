@@ -22,6 +22,13 @@ jobs:
         #   with:
         #     license-server: ${{ secrets.MATLAB_LICENSE_TOKEN }}
 
+      - name: Lint (checkcode)
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run('run_lint.m')
+        env:
+          MATLAB_BATCH: "1"
+
       - name: Rodar testes
         uses: matlab-actions/run-command@v2
         with:

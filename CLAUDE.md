@@ -39,6 +39,19 @@ variável de entrada (ex: `vars.u1`, `vars.u2`). Não assumir nomes fixos `u`/`x
   toda a população em lote numa única operação de álgebra; integração exige
   reestruturar `avaliarPopulacao` para vetorização em lote — trabalho pendente.
 
+### Fitness disponíveis (`config.tipoFitness`)
+- `'osa'` (default): erro OSA — `scoreOsa.m`. Mais rápido, numericamente estável.
+- `'mShooting'`: janelas de free-run — `scoreMShooting.m`. Penaliza modelos instáveis;
+  alinhado com o default da biblioteca Python. Controle via `config.janelaMShooting` (default 5).
+
+### Defaults de `evoluir.m` (pós-alinhamento Python)
+| campo | default | observação |
+|---|---|---|
+| `maxDelay` | 5 | era campo obrigatório; agora opcional |
+| `numTermosInicial` | 5 | era 3 |
+| `tipoFitness` | `'osa'` | novo campo |
+| `janelaMShooting` | 5 | novo campo |
+
 ### Padrão de testes
 - Cada arquivo `dev/tests/test_X.m` define uma função `test_X()` sem argumentos.
 - Sucesso = a função termina sem `error()`; imprime `"OK ..."` no final.
@@ -47,12 +60,11 @@ variável de entrada (ex: `vars.u1`, `vars.u2`). Não assumir nomes fixos `u`/`x
 - `test_lsGpu.m` pula (aviso) se não houver GPU CUDA disponível na máquina.
 
 ## Status atual (importante)
-**Nenhum dos 8 testes rodou no MATLAB real ainda.** Toda a validação foi lógica e
-revisão manual. Antes de qualquer mudança estrutural, rodar os testes na ordem:
+**Todos os 9 testes passaram no MATLAB real (R2025b).** Suite completa: `run_tests`.
+Antes de qualquer mudança estrutural, re-rodar a suite. Ordem de dependência:
 `test_ls → test_predictFreeRun → test_MggpModel → test_operadoresGeneticos →
-test_evoluir → test_evoluir_parfor → test_lsGpu → test_evoluirNsga2`.
-Erros iniciais (ex: `makeRegressors`) podem se manifestar como falhas confusas nas
-camadas superiores.
+test_evoluir → test_evoluir_parfor → test_lsGpu → test_evoluirNsga2 → test_scoreMShooting`.
+Erros em camadas inferiores propagam como falhas confusas nas superiores.
 
 ## NSGA-II
 `src/evoluirNsga2.m` e os auxiliares de Pareto (`dominanciaParento.m`,

@@ -64,7 +64,7 @@ function [melhorModelo, melhorTheta, historico] = evoluir(config)
     config = aplicarDefaults(config);
 
     populacao = inicializarPopulacao(config);
-    fitnessPop = avaliarPopulacao(populacao, config.vars, config.usarParfor);
+    fitnessPop = avaliarPopulacao(populacao, config.vars, config);
 
     historico = struct('geracao', {}, 'melhorFitness', {}, 'fitnessMedio', {});
 
@@ -124,7 +124,7 @@ function config = aplicarDefaults(config)
 %APLICARDEFAULTS Preenche campos opcionais de config com os valores
 %   default (mesmos defaults documentados da biblioteca original, onde
 %   aplicavel: popSize=100, CXPB=0.9, MTPB=0.1, n_gen=50, elite=5%).
-    camposObrigatorios = {'vars', 'nomesEntradas', 'maxDelay', 'maxFatoresPorTermo'};
+    camposObrigatorios = {'vars', 'nomesEntradas', 'maxFatoresPorTermo'};
     for i = 1:numel(camposObrigatorios)
         if ~isfield(config, camposObrigatorios{i})
             error('evoluir:campoObrigatorioFaltando', ...
@@ -139,7 +139,10 @@ function config = aplicarDefaults(config)
         'mtpb', 0.1, ...
         'tamanhoTorneio', 3, ...
         'elite', 0.05, ...
-        'numTermosInicial', 3, ...
+        'maxDelay', 5, ...
+        'numTermosInicial', 5, ...
+        'tipoFitness', 'osa', ...
+        'janelaMShooting', 5, ...
         'verbose', true, ...
         'verbose_timing', false, ...
         'usarParfor', false);
@@ -163,21 +166,23 @@ function populacao = inicializarPopulacao(config)
     end
 end
 
-function fitnessPop = avaliarPopulacao(populacao, vars, usarParfor)
-%AVALIARPOPULACAO Calcula o fitness (OSA) de cada individuo da populacao.
+function fitnessPop = avaliarPopulacao(populacao, vars, config)
+%AVALIARPOPULACAO Calcula o fitness de cada individuo da populacao.
 %
-%   Este e o gargalo real do loop evolutivo: cada avaliacao (LS + OSA)
+%   Este e o gargalo real do loop evolutivo: cada avaliacao (LS + fitness)
 %   e independente das demais (nenhum individuo le/escreve estado
 %   compartilhado), o que a torna um candidato direto para PARFOR sem
 %   reestruturar nada — condicao necessaria para paralelizar um loop
 %   com parfor (cada iteracao deve ser independente das outras).
 %
-%   usarParfor (opcional, default false): se true, usa parfor em vez de
-%   for. Default false porque parfor exige o Parallel Computing Toolbox
-%   e abrir um parpool (custo fixo de alguns segundos na primeira
-%   chamada) — para populacoes pequenas ou uma unica execucao rapida de
-%   teste, o overhead de abrir o pool pode superar o ganho. Ver
-%   EVOLUIR para como habilitar via config.usarParfor.
+%   config.usarParfor: se true, usa parfor em vez de for. Default false
+%   porque parfor exige o Parallel Computing Toolbox e abrir um parpool
+%   (custo fixo de alguns segundos na primeira chamada) — para populacoes
+%   pequenas ou uma unica execucao rapida de teste, o overhead de abrir o
+%   pool pode superar o ganho.
+%
+%   config.tipoFitness: 'osa' (default) ou 'mShooting'. Ver SCOREOSA e
+%   SCOREMSHOOTING.
 %
 %   ATENCAO — REPRODUTIBILIDADE: workers de parfor usam gerador de
 %   numeros aleatorios PROPRIO, independente do rng() do processo
@@ -189,32 +194,40 @@ function fitnessPop = avaliarPopulacao(populacao, vars, usarParfor)
 %   https://www.mathworks.com/help/parallel-computing/control-random-number-streams-on-workers.html
 %   para como lidar com isso caso vire necessario).
 
-    if nargin < 3
-        usarParfor = false;
-    end
-
     n = numel(populacao);
     fitnessPop = zeros(1, n);
 
-    if usarParfor
+    if config.usarParfor
         parfor i = 1:n
-            fitnessPop(i) = avaliarIndividuo(populacao(i), vars); %#ok<PFBNS>
+            fitnessPop(i) = avaliarIndividuo(populacao(i), vars, config); %#ok<PFBNS>
         end
     else
         for i = 1:n
-            fitnessPop(i) = avaliarIndividuo(populacao(i), vars);
+            fitnessPop(i) = avaliarIndividuo(populacao(i), vars, config);
         end
     end
 end
 
-function fitness = avaliarIndividuo(individuo, vars)
+function fitness = avaliarIndividuo(individuo, vars, config)
 %AVALIARINDIVIDUO Fitness de um individuo, com fallback para Inf se o
 %   LS falhar (matriz singular) — mesmo padrao do exemplo README
 %   original (try/except retornando Inf). Ver nota de tratamento de
 %   erro no cabecalho de EVOLUIR.
+%
+%   Despacha para SCOREOSA ou SCOREMSHOOTING conforme config.tipoFitness.
     try
         theta = individuo.estimarTheta(vars);
-        fitness = individuo.avaliarFitness(theta, vars);
+        switch config.tipoFitness
+            case 'osa'
+                fitness = individuo.avaliarFitness(theta, vars);
+            case 'mShooting'
+                fitness = scoreMShooting(theta, individuo.compile(), vars, ...
+                    individuo.maiorAtraso(), config.janelaMShooting);
+            otherwise
+                error('evoluir:tipoFitnessInvalido', ...
+                    'config.tipoFitness deve ser ''osa'' ou ''mShooting''. Recebido: ''%s''.', ...
+                    config.tipoFitness);
+        end
     catch
         fitness = Inf;
     end
@@ -275,7 +288,7 @@ function [novaPopulacao, novoFitness, tFase1, tFase2] = proximaGeracao(populacao
 
     % Fase 2 (pode ser paralela): avalia todos os filhos de uma vez.
     tInicio2 = tic;
-    fitnessFilhos = avaliarPopulacao(filhos, config.vars, config.usarParfor);
+    fitnessFilhos = avaliarPopulacao(filhos, config.vars, config);
     tFase2 = toc(tInicio2);
 
     novaPopulacao = [elitePopulacao, filhos];

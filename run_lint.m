@@ -30,4 +30,7 @@ if totalProblemas == 0
     fprintf('OK: nenhum aviso de checkcode em src/ (%d arquivos).\n', numel(files));
 else
     fprintf('\nTotal: %d aviso(s) em %d arquivo(s).\n', totalProblemas, numel(files));
+    if ~isempty(getenv('MATLAB_BATCH'))
+        exit(1);
+    end
 end

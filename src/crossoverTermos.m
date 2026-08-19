@@ -32,12 +32,14 @@ function [filho1, filho2] = crossoverTermos(termoPai1, termoPai2)
     novosFatores2 = [fatores2(1:corte2), fatores1((corte1+1):end)];
 
     if isempty(novosFatores1)
-        % ambos os cortes zeraram esse lado -- mantem pelo menos 1 fator
-        % do pai original em vez de gerar um termo vazio (invalido).
-        novosFatores1 = fatores1(1);
+        % roubar do irmão preserva o total de fatores (ao contrário de
+        % pegar do pai original, que duplicaria e inflaria a contagem).
+        novosFatores1 = novosFatores2(1);
+        novosFatores2 = novosFatores2(2:end);
     end
     if isempty(novosFatores2)
-        novosFatores2 = fatores2(1);
+        novosFatores2 = novosFatores1(1);
+        novosFatores1 = novosFatores1(2:end);
     end
 
     filho1 = MggpTerm(novosFatores1);

@@ -11,15 +11,15 @@ measurably faster when parallelism is enabled — with numbers, not just "it ran
 Nothing in this plan is meaningful if the basic tests are failing. Run these first,
 fix each layer before moving up.
 
-- [ ] Run `test_ls` — exit without error
-- [ ] Run `test_predictFreeRun` — exit without error
-- [ ] Run `test_MggpModel` — exit without error
-- [ ] Run `test_operadoresGeneticos` — exit without error
-- [ ] Run `test_evoluir` — exit without error
-- [ ] Run `test_evoluir_parfor` — exit without error (requires PCT)
-- [ ] Run `test_lsGpu` — exit without error or expected skip message (no GPU)
-- [ ] Run `test_evoluirNsga2` — exit without error
-- [ ] `run_tests.m` exits with code 0 when all pass
+- [x] Run `test_ls` — exit without error
+- [x] Run `test_predictFreeRun` — exit without error
+- [x] Run `test_MggpModel` — exit without error
+- [x] Run `test_operadoresGeneticos` — exit without error (fix: crossoverTermos roubava do pai em vez do irmão)
+- [x] Run `test_evoluir` — exit without error
+- [x] Run `test_evoluir_parfor` — exit without error (requires PCT)
+- [x] Run `test_lsGpu` — exit without error or expected skip message (no GPU)
+- [x] Run `test_evoluirNsga2` — exit without error
+- [x] `run_tests.m` exits with code 0 when all pass
 
 ---
 
@@ -225,3 +225,136 @@ NSGA-II trades model accuracy for model simplicity (fewer terms). Validation:
 
 Steps 3d and 5 depend on optional hardware (GPU) and extended toolchain (Python + mggp);
 they can be skipped without breaking the rest of the plan.
+
+---
+
+# GOALS 2 — Python Alignment
+
+**Goal of this plan:** close the most impactful training-regime gaps between the MATLAB port
+and the Python original (`mggp_novo`), without rebuilding anything that already works.
+Two targeted changes:
+
+1. **Default hyperparameters** — `numTermosInicial` and `maxDelay` defaults currently don't
+   reflect Python's operational range, making out-of-the-box results harder to compare.
+2. **MShooting fitness** — the Python default fitness is `MShooting` (windowed free-run),
+   not OSA. OSA is numerically safer during GP search but MShooting penalises unstable models
+   and tends to generalise better; having it as an option brings the two regimes to parity.
+
+```mermaid
+flowchart LR
+    A[Design rationale] --> B[Adjust defaults in evoluir.m]
+    A --> C[Implement scoreMShooting.m]
+    B --> D[Integrate config.tipoFitness]
+    C --> D
+    D --> E[test_scoreMShooting.m]
+    D --> F[bench_mshooting.m comparison]
+    E --> F
+```
+
+---
+
+## G2-0. Design rationale — read before implementing
+
+**`numTermosInicial` 3 → 5.**
+Python default `nTerms=15` counts full GP trees, each potentially 15 levels deep.
+MATLAB terms are flat products of `q<k>(<var>)` factors — shallower per term, so fewer
+total terms are needed to cover comparable expressiveness. 5 is the correct analogue for
+most NARX problems (3 was chosen conservatively when no real MATLAB runs existed yet).
+
+**`maxDelay` required → optional, default 5.**
+Python default `nDelays=15` means delays q1…q15 are available as primitives. MATLAB
+`maxDelay` currently has no default (required field). A default of 5 covers the vast
+majority of benchmark systems (the SISO system in §1a only needs maxDelay=2; 5 gives
+headroom for real data). Systems with longer dynamics pass `maxDelay` explicitly.
+
+**MShooting window `k = 5` default.**
+Matches the Python default `k=5`. The window divides the validation series into
+non-overlapping blocks of k steps; each block is simulated via free-run from real y
+initial conditions, then compared to the real output. This penalises models that
+diverge after a few steps, unlike OSA which resets from real data every step.
+
+**Out of scope for this feature:**
+- Making MATLAB terms hierarchically nestable (deep GP trees) — that would be a rewrite.
+- MIMO support — separate feature.
+- Matching Python's CrossLowUniform (sub-tree crossover) — no tree structure in MATLAB.
+- Replacing OSA as default — MShooting is an *additive option*, OSA stays default.
+
+---
+
+## G2-1. Adjust defaults in `evoluir.m`
+
+- [x] Move `maxDelay` out of `camposObrigatorios` and into `defaults` with value `5`
+  - `aplicarDefaults`: add `'maxDelay', 5` to the `defaults` struct
+  - Remove `'maxDelay'` from the `camposObrigatorios` cell array
+  - Verify: callers that already pass `maxDelay` explicitly are unaffected; callers that
+    omit it now get 5 instead of an error — check all benchmark scripts
+- [x] Change `numTermosInicial` default from `3` to `5` in `aplicarDefaults`
+- [x] Update `CLAUDE.md` "Paralelismo" status note to reflect new defaults
+
+---
+
+## G2-2. Implement `src/scoreMShooting.m`
+
+- [x] Create `src/scoreMShooting.m` with signature:
+  ```matlab
+  mse = scoreMShooting(theta, terms, vars, maxDelay, k)
+  ```
+  - `k` (default 5 if omitted): window size in samples
+  - Algorithm:
+    1. From `vars`, extract `y` and all input fields
+    2. Compute `lagMax` from `terms` (same logic as `scoreOsa`)
+    3. Divide the valid region `y(lagMax+1 : end)` into non-overlapping windows of `k`
+       (drop the last incomplete window)
+    4. For each window `w` starting at index `winStart`:
+       - `y0 = y(winStart-lagMax : winStart-1)` — real initial conditions
+       - `winInputs.(name) = vars.(name)(winStart : winStart+k-1)` for each input
+       - Call `predictFreeRun(theta, terms, y0, winInputs)` → `yFull`
+       - Predicted values = `yFull(end-k+1 : end)`
+       - True values = `y(winStart : winStart+k-1)`
+    5. MSE over all windows concatenated
+  - Input history at window start: `predictFreeRun` prepends zeros for inputs, which is a
+    first-order approximation acceptable for short delays (same behaviour as Python's
+    `np.roll`-based implementation)
+  - Return `Inf` if `numWindows < 1` (series too short for even one window)
+- [x] Mirrors `scoreOsa.m` in style — same header format, same `nargin` guard for optional args
+
+---
+
+## G2-3. Integrate `config.tipoFitness` into `evoluir.m`
+
+- [x] Add `'tipoFitness', 'osa'` to the `defaults` struct in `aplicarDefaults`
+- [x] Add `'janelaMShooting', 5` to `defaults` (used only when `tipoFitness='mShooting'`)
+- [x] In `avaliarIndividuo`: replace the direct `avaliarFitness` call with a dispatcher
+- [x] `avaliarIndividuo` receives `config` as third argument; both call sites updated
+- [x] `parfor`-safe: `config` is a struct with no shared mutable state
+
+---
+
+## G2-4. Tests — `dev/tests/test_scoreMShooting.m`
+
+- [x] Create `dev/tests/test_scoreMShooting.m` with function `test_scoreMShooting()`
+- [x] Test 1 — finite result on a known model (SISO reference system)
+- [x] Test 2 — MShooting >= OSA/2 (MShooting is more demanding, sanity check)
+- [x] Test 3 — k > N returns Inf (no complete window possible)
+- [x] Add `dev/tests/test_scoreMShooting` to `run_tests.m` as test 9/9
+
+---
+
+## G2-5. Benchmark — `dev/benchmarks/bench_mshooting.m`
+
+- [x] Create `dev/benchmarks/bench_mshooting.m`
+- [x] Uses SISO reference dataset, 3 seeds (42–44), popSize=60, nGeracoes=20
+- [x] Runs evolution with `tipoFitness='osa'` and `tipoFitness='mShooting'`, same seeds
+- [x] Prints OSA-RMSE(val), FR-RMSE(val), wall time; saves JSON via `salvarBenchJson`
+- [ ] (manual) Run `bench_mshooting` in MATLAB and verify FR-RMSE(mShooting) ≤ FR-RMSE(osa)×1.5
+
+---
+
+## G2 Execution order
+
+```
+G2-0 (design) → G2-1 (defaults) → G2-2 (scoreMShooting) → G2-3 (integrate)
+→ G2-4 (tests) → G2-5 (benchmark)
+```
+
+G2-1 and G2-2 are independent and can be done in parallel. G2-3 depends on both.

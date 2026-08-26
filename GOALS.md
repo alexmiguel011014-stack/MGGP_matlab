@@ -358,3 +358,443 @@ G2-0 (design) → G2-1 (defaults) → G2-2 (scoreMShooting) → G2-3 (integrate)
 ```
 
 G2-1 and G2-2 are independent and can be done in parallel. G2-3 depends on both.
+
+---
+
+# GOALS 3 — Python vs MATLAB: Benchmarking Comparison
+
+**Goal:** quantify objectively whether the MATLAB port is faster, cheaper, or slower than the
+Python original (`mggp`) on the **same training task** — with reproducible numbers, not
+impressions. The comparison uses a synthetic MISO dataset so both implementations run on
+identical inputs without requiring the real bicycle data (MIMO, Wang tracks) that the Python
+notebook uses by default. A MIMO comparison on real data is a stretch goal (G3-7).
+
+**Reference Python code:** `dev/comparison/TrainingMGGP_LOOP.ipynb` — copied from
+`D:\ProjetosPessoais\IC\TreinamentoMGGP_2_0`. This is the production training loop used in the
+IC project: autonomous, reads a control spreadsheet, trains 10 models per config, validates on 4
+tracks (Wang 2.1/2.2/3.1/8.1), MIMO mode.
+
+**Key asymmetry to keep in mind:** the Python code runs in MIMO mode (5 inputs, 2 outputs);
+MATLAB is currently MISO. The fair comparison protocol uses MISO synthetic data on both sides.
+Extending MATLAB to MIMO is out of scope for this goal.
+
+```mermaid
+flowchart TD
+    A[G3-0 Design rationale] --> B[G3-1 Understand Python code]
+    B --> C[G3-2 Shared protocol — dataset & params]
+    C --> D[G3-3 Python harness script]
+    C --> E[G3-4 MATLAB harness bench_vs_python.m]
+    D --> F[G3-5 Collect & compare metrics]
+    E --> F
+    F --> G[G3-6 Report generation]
+    G --> H[G3-7 Stretch: MIMO on real data]
+```
+
+---
+
+## G3-0. Design rationale — read before implementing
+
+**Fair comparison protocol:**
+- Same MISO synthetic dataset: `y(k) = 0.75·y(k-2) + 0.25·u1(k-1) − 0.20·y(k-2)·u1(k-1)`,
+  N=1000, rng(42), saved as `dev/comparison/data/siso_ref.csv`
+- Same hyperparameters (as close as the two APIs allow):
+  - `popSize = 100`, `nGeracoes/generations = 50`, `maxDelay/nDelays = [1,2,3]`, `nTerms = 5`
+  - Fitness: `tipoFitness='mShooting'` (MATLAB) / `evaluationType='MShooting'` (Python) — both now available
+  - Same 3 seeds: 42, 43, 44
+
+**Metrics to collect (for each seed, then mean ± std across seeds):**
+
+| Metric | Description | Why it matters |
+|---|---|---|
+| Wall-clock time (s) | `tic/toc` or `time.time()` — total training | Primary comparison |
+| Time per generation (ms) | Wall / nGeracoes | Normalizes for config differences |
+| Throughput (eval/s) | (popSize × nGeracoes) / wall time | Implementation efficiency |
+| Peak RAM (MB) | `memory_profiler` (Python) / `whos` heap (MATLAB) | Resource cost |
+| OSA-RMSE (val) | One-step-ahead on validation set | Quality — must be comparable |
+| FR-RMSE (val) | Free-run on validation set | Generalisation quality |
+| Convergence gen | Generation where RMSE first drops below 0.05 | Speed-to-quality |
+| Scalability slope | Wall time at popSize ∈ {50,100,200} | Scaling behaviour |
+
+**Out of scope:**
+- Matching Python's MIMO mode in MATLAB (separate goal)
+- Real bicycle data (requires `wang21dv_bic_MGGP.xlsx` which is not in this repo)
+- GPU comparison (covered in GOALS 1 §3d)
+- Matching Python's DEAP crossover operators exactly
+
+---
+
+## G3-1. Understand the Python code structure
+
+- [ ] Read `dev/comparison/TrainingMGGP_LOOP.ipynb` fully — document in `dev/comparison/PYTHON_NOTES.md`:
+  - What does `MGGP(inputs, outputs, ...)` do on construction?
+  - What does `mggp.run()` execute? (population init → evaluation loop → DEAP operators)
+  - How does `evaluationType='MShooting'` work in Python's `predict()`?
+  - What are `nDelays`, `nTerms`, `maxHeight` — Python's equivalents of MATLAB fields?
+  - What is `mode='MIMO'`? What changes internally vs SISO?
+  - Identify the Python fitness bottleneck (is it the LS solve? the free-run prediction?)
+- [ ] List any Python-only features with no MATLAB equivalent (deep GP trees, CrossLowUniform, FROE, etc.)
+- [ ] List any MATLAB features with no Python equivalent (NSGA-II, parfor, GPU LS)
+
+---
+
+## G3-2. Shared comparison protocol — dataset and params
+
+- [ ] Create `dev/comparison/data/` directory (gitignored — generated data)
+  - Add `dev/comparison/data/` to `.gitignore`
+- [ ] Write `dev/comparison/generate_dataset.m` — generates `siso_ref.csv` with columns `y,u1`
+  (N=1000, rng(42), the same SISO system used in bench_siso)
+- [ ] Write `dev/comparison/generate_dataset.py` — reads `siso_ref.csv` (Python doesn't generate it;
+  both sides use the same CSV to guarantee bit-for-bit identical inputs)
+- [ ] Document the agreed hyperparameter mapping in `dev/comparison/PROTOCOL.md`:
+
+  | MATLAB field | Python param | Value used |
+  |---|---|---|
+  | `popSize` | `populationSize` | 100 |
+  | `nGeracoes` | `generations` | 50 |
+  | `maxDelay` | `nDelays` (list) | `[1,2,3]` |
+  | `numTermosInicial` | `nTerms` | 5 |
+  | `tipoFitness='mShooting'` | `evaluationType='MShooting'` | — |
+  | `janelaMShooting=5` | `k=5` | — |
+  | `maxFatoresPorTermo` | `maxHeight` | 2 (MATLAB) / 2 (Python depth) |
+  | seeds | seeds | 42, 43, 44 |
+
+---
+
+## G3-3. Python benchmark harness
+
+- [ ] Create `dev/comparison/bench_python.py` — standalone script (no notebook dependency):
+  - Reads `data/siso_ref.csv`
+  - Runs `MGGP` for each seed with the agreed params
+  - Records: wall time (`time.perf_counter`), OSA-RMSE on val, FR-RMSE on val, convergence gen
+  - Records peak RAM with `tracemalloc` (stdlib, no extra install)
+  - Saves `results/python_bench_<timestamp>.json`
+- [ ] Create `dev/comparison/requirements.txt` pinning the exact `mggp` version used
+- [ ] Document how to run: `python bench_python.py` from `dev/comparison/`
+- [ ] (manual) Run `bench_python.py` and confirm it completes without error
+
+---
+
+## G3-4. MATLAB benchmark harness
+
+- [ ] Create `dev/comparison/bench_matlab_vs_python.m`:
+  - Reads `data/siso_ref.csv` (using `readtable`)
+  - Runs `evoluir` for each seed with the agreed params
+  - Records: wall time (`tic/toc`), OSA-RMSE (val), FR-RMSE (val), convergence gen
+  - Records peak RAM via `feature('memstats')` (Windows) or `memory` function
+  - Saves `results/matlab_bench_<timestamp>.json` via `salvarBenchJson`
+- [ ] Add parfor variant: also run with `config.usarParfor=true` and record separately
+- [ ] (manual) Run `bench_matlab_vs_python.m` from MATLAB and confirm it completes
+
+---
+
+## G3-5. Collect and compare metrics
+
+- [ ] Create `dev/comparison/compare_results.m`:
+  - Reads the latest `python_bench_*.json` and `matlab_bench_*.json` from `results/`
+  - Prints a markdown comparison table (wall time, throughput, RAM, RMSE, convergence gen)
+  - Computes speedup: `t_python / t_matlab_seq` and `t_python / t_matlab_par`
+  - **Pass threshold**: quality parity — MATLAB FR-RMSE (val) ≤ Python FR-RMSE (val) × 1.2
+    (within 20 %; GP is stochastic, exact match not expected)
+- [ ] (manual) Run after both harnesses produce results
+
+---
+
+## G3-6. Report generation
+
+- [ ] Create `dev/comparison/RESULTS.md` — filled in after running G3-5:
+  - Summary table (one row per implementation × config)
+  - Speedup numbers (seq and par vs Python)
+  - Which implementation reaches better model quality?
+  - Recommendation: when to prefer each (speed, quality, parallelism, portability)
+- [ ] (manual) Fill in RESULTS.md after collecting real numbers from G3-3 and G3-4
+
+---
+
+## G3-7. Stretch — MIMO comparison on real data (optional)
+
+- [ ] Extends MATLAB to support MIMO output (`makeRegressors` and `evoluir` for vector `y`)
+- [ ] Runs both implementations on Wang 2.1 training data / Wang 2.2 validation
+- [ ] Requires: `wang21dv_bic_MGGP.xlsx` and `wang22dv_bic_MGGP.xlsx` present locally
+- [ ] Out of scope until MATLAB MISO comparison (G3-5) is complete
+
+---
+
+## G3 Execution order
+
+```
+G3-0 → G3-1 → G3-2 → G3-3 (parallel) / G3-4 (parallel) → G3-5 → G3-6 → G3-7 (optional)
+```
+
+G3-3 and G3-4 are independent once G3-2 is done. G3-7 depends on all preceding items.
+
+---
+
+# GOALS 4 — Python Parity: close all behavioral differences
+
+**Goal:** make MATLAB produce the same numerical outputs as the Python library
+(`mggp_novo`, CastroHc/MGGP) on identical inputs and hyperparameters.
+**Constraint (verbatim):** "Não podemos ter diferenças agora mesmo que seja um
+conserto que faça o matlab ser melhor que o python. Se você tiver sugestões que
+melhore, guarde para depois."
+
+This means: fix everything to match Python exactly. If the fix makes MATLAB slightly worse in some
+edge case — that is acceptable. Save improvements for later.
+
+Sources read in full to derive this list: `mggp1.py`, `src/base.py`, `src/predictors.py`,
+`src/crossings.py`, `src/mutations.py`.
+
+```mermaid
+flowchart TD
+    A[G4-0 Read & catalogue gaps] --> B[G4-1 Bias column in P]
+    A --> C[G4-2 MShooting windowing]
+    A --> D[G4-3 Hyperparameter defaults]
+    B --> E[G4-4 Update tests]
+    C --> E
+    D --> E
+    E --> F[G4-5 Validate full test suite]
+    F --> G[G4-6 Document architectural differences]
+```
+
+---
+
+## G4-0. Parity audit results — read before implementing
+
+This section records every difference found. Items are classified:
+- **[FIX]** — implementable, must be done in this goal
+- **[ARCH]** — architectural; cannot be fixed without a full rewrite; documented only
+
+### [FIX] G4-F1: Bias column missing from P matrix
+
+**Python (`IndividualMISO.makeRegressors`, `base.py`):**
+```python
+p = np.ones((y.shape[0] - self.lagMax - 1, len(self) + 1))
+# Column 0 = ones (bias/intercept), always present
+# Columns 1..n = term evaluations
+```
+`theta[0]` is always the bias coefficient. LS always estimates `nTerms + 1` parameters.
+
+**MATLAB (`makeRegressors.m`):**
+P has exactly `nTerms` columns — no bias column. LS estimates `nTerms` parameters.
+
+**Impact:** every LS result, every OSA score, and every MShooting score differs
+between the two implementations even for the same individual on the same data.
+The bias term absorbs the mean of y, which matters for non-zero-mean systems.
+
+**Fix:** in `makeRegressors.m`, always prepend a column of ones as column 1 before
+returning P. In `scoreOsa.m` and `scoreMShooting.m`, pass the full `[ones, terms]` P to `ls`.
+No change to `ls.m` itself (it already handles any size P).
+
+**Downstream changes needed:** `predictFreeRun.m` uses `theta` directly with the term list;
+the first element of theta will now be the bias — handle constant term `'1'` (bias) in
+`predictFreeRun` so that `theta(1)` is added without a term product, or include the constant
+as a synthetic term whose value is always 1.
+
+---
+
+### [FIX] G4-F2: MShooting windowing algorithm
+
+**Python (`miso_MShooting` in `predictors.py`):**
+```python
+n_batchs = int(np.floor(u.shape[0] / (ind.lagMax + 1 + k)))
+N = ind.lagMax + 1 + k           # window = lagMax+1 IC + k prediction steps
+newshape = (n_batchs, N, 1)
+yk = np.resize(y, newshape)       # tiles/wraps y to fill batches exactly
+y0 = yk[:, :ind.lagMax + 1, :]   # lagMax+1 initial-condition samples per batch
+```
+- Each window: `lagMax + 1` IC samples + `k` prediction steps = `lagMax + 1 + k` total
+- Number of complete windows: `floor(total_N / (lagMax + 1 + k))`
+- Python uses `np.resize` (wraps the signal cyclically), not `np.pad`
+
+**MATLAB (`scoreMShooting.m`, G2-2):**
+- Each window: `lagMax` IC samples + `k` prediction steps = `lagMax + k` total
+- Windows are non-overlapping, sequential, starting from `lagMax+1`
+- No wrapping
+
+**Fix in `scoreMShooting.m`:**
+1. Change IC length from `lagMax` to `lagMax + 1` per window
+2. Change window size to `lagMax + 1 + k` for batch counting:
+   `numJanelas = floor(numel(y) / (lagMax + 1 + k))`
+3. Build windows from the START of y (index 1), not from `lagMax+1`:
+   `winStart = (w-1) * (lagMax + 1 + k) + 1` for window `w`
+4. IC slice: `y(winStart : winStart + lagMax)` — `lagMax+1` samples
+5. Prediction slice: `y(winStart+lagMax+1 : winStart+lagMax+k)` — `k` targets
+6. No cyclic wrapping — use `floor` to drop incomplete windows (Python also does this via `floor`)
+
+---
+
+### [FIX] G4-F3: Hyperparameter defaults misaligned
+
+Defaults extracted from `mggp1.py` constructor:
+
+| Parameter | Python default | MATLAB default (current) | Action |
+|---|---|---|---|
+| `crossoverRate` / `cxpb` | `0.8` | `0.9` | Change MATLAB to `0.8` |
+| `tournsize` / `tamanhoTorneio` | `2` | `3` | Change MATLAB to `2` |
+| `elitePercentage` / `elite` | `10 %` → `0.10` | `0.05` (5 %) | Change MATLAB to `0.10` |
+| `evaluationType` / `tipoFitness` | `'MShooting'` | `'osa'` | Already available; update default to `'mShooting'` |
+| `evaluationMode` | `'RMSE'` | MSE (implicit) | See note below |
+
+**Note on RMSE vs MSE:** Python computes `sqrt(mean((yp-yd)^2))` for fitness; MATLAB
+computes `mean((yp-yd)^2)`. Both have the same argmin (monotonic transform), so GP search
+outcome is identical. Do **not** change the scale — but when producing comparison reports,
+convert to the same unit (both as RMSE or both as MSE) before printing side-by-side numbers.
+
+**Fix:** update `aplicarDefaults` in `evoluir.m` to reflect new values above.
+
+---
+
+### [ARCH] G4-A1: Lag offset (cannot fix without rewriting Python)
+
+**Python:** DEAP functions receive `y[:-1]` (all y except last sample) and apply
+`np.roll(y[:-1], shift=i)`. The result at position `lagMax+r` is `y[lagMax+r-i]`. For
+prediction target at index `lagMax+1+r`, Python's `q_i(y)` gives `y[lagMax+r-i]`, which
+is lag `i+1` from the target — i.e., `q1` = 1-step-behind-one-more-step = lag 2 from target.
+
+**MATLAB:** `q1(y)` at prediction time `t` gives `y(t-1)` — lag 1 from target.
+
+**Consequence:** Python and MATLAB with the same delay labels will use different absolute
+lags. On the same dataset, a Python model with `q1(y)` term and a MATLAB model with `q1(y)`
+term predict using different historical values.
+
+**Why not fixable:** this arises from DEAP's window-based evaluation model (`y[:-1]` as
+the sliding window). Fixing it would require rewriting all of Python's internal evaluation
+functions or adopting DEAP's architecture in MATLAB. Classify as known limitation.
+
+**Documentation action:** record in `CLAUDE.md` under a new "Known Parity Limitations" section.
+
+---
+
+### [ARCH] G4-A2: GP tree depth vs flat product terms (cannot fix)
+
+**Python:** each term is a DEAP `PrimitiveTree` — a full GP tree that can nest
+`mul(q1(y), mul(q2(u1), q3(y)))` up to `maxHeight=15` levels. Default `nTerms=15` trees.
+
+**MATLAB:** each term is a flat product of `q<k>(var)` factors: `q1(y) * q2(u1)`.
+`maxFatoresPorTermo` controls the product length (not nesting depth).
+
+**Consequence:** Python can represent far more complex nonlinear interactions per term.
+MATLAB's search space is a strict subset of Python's for the same delay budget.
+
+**Why not fixable:** would require replacing the entire `MggpModel`, `MggpTerm`,
+`gerarIndividuoAleatorio`, crossover, and mutation infrastructure with a GP tree system.
+
+---
+
+### [ARCH] G4-A3: Crossover and mutation operators (cannot fix)
+
+**Python defaults:** `CrossHighUniform` (swap terms with 50 % per-term probability) +
+`CrossLowUniform` (subtree GP crossover within each term, 50 % per-term probability).
+Mutations: `MutGPOneTree`, `MutGPUniform`, `MutGPReplace` — all operate on DEAP subtrees.
+
+**MATLAB:** `crossoverTermos` (swaps factor lists between parents at a random cut point);
+`mutarModelo` (replaces one factor in one term with a new random factor).
+
+**Why not fixable:** subtree crossover requires tree structure. MATLAB's flat representation
+cannot support `CrossLowUniform`. `CrossHighUniform`'s per-term 50 % swap is structurally
+similar to MATLAB's `crossoverTermos` — both swap full terms — but the mechanics differ.
+
+---
+
+### [ARCH] G4-A4: Valid sample count (off by one)
+
+**Python:** P has `N - lagMax - 1` rows (because `y[:-1]` drops the last sample).
+**MATLAB:** P has `N - lagMax` rows.
+
+One extra training sample in MATLAB per individual evaluation. Consequence: MATLAB trains
+on marginally more data. Cannot be fixed without adopting DEAP's window model (see G4-A1).
+
+---
+
+## G4-1. Fix bias column in P matrix
+
+Files to change: `src/makeRegressors.m`, `src/predictFreeRun.m`.
+
+- [ ] In `makeRegressors.m`: prepend `ones(numAmostrasValidas, 1)` as column 1 of P
+  before returning. The existing term columns become columns 2..end.
+- [ ] In `predictFreeRun.m`: add `acumulado = theta(1)` as the initial accumulator
+  (bias offset), then loop `t = 2:numel(theta)` for the term products.
+  Match: Python always evaluates `theta[0] * 1 + sum(theta[i] * term_i)`.
+- [ ] Verify: `size(P, 2) == numel(terms) + 1` in `makeRegressors` output
+- [ ] Verify: `numel(theta) == numel(terms) + 1` after LS
+
+---
+
+## G4-2. Fix MShooting windowing
+
+File to change: `src/scoreMShooting.m`.
+
+- [ ] Replace current window logic with Python-aligned algorithm:
+  ```matlab
+  windowSize = lagMax + 1 + k;
+  numJanelas = floor(numel(y) / windowSize);
+  if numJanelas < 1, mse = Inf; return; end
+  erros = [];
+  for w = 1:numJanelas
+      ini = (w-1)*windowSize + 1;
+      ic  = y(ini : ini + lagMax);          % lagMax+1 IC samples
+      yTgt = y(ini+lagMax+1 : ini+lagMax+k); % k target samples
+      uJan = struct(); for each input: slice windowSize samples from ini
+      yFull = predictFreeRun(theta, terms, ic, uJan);
+      yPred = yFull(end-k+1:end);            % last k of free-run
+      erros = [erros; yTgt - yPred];
+  end
+  mse = mean(erros .^ 2);
+  ```
+- [ ] `test_scoreMShooting.m` tests 1–3 must still pass after this change
+  (test thresholds may need adjustment — update if values shift within reason)
+
+---
+
+## G4-3. Align hyperparameter defaults
+
+File to change: `src/evoluir.m` (`aplicarDefaults` subfunction).
+
+- [ ] `cxpb`: change default from `0.9` to `0.8`
+- [ ] `tamanhoTorneio`: change default from `3` to `2`
+- [ ] `elite`: change default from `0.05` to `0.10`
+- [ ] `tipoFitness`: change default from `'osa'` to `'mShooting'`
+- [ ] Update the docstring comment in `evoluir.m` to reflect new defaults
+- [ ] Update `CLAUDE.md` "Defaults de `evoluir.m`" table
+
+---
+
+## G4-4. Update affected tests
+
+- [ ] Re-run `test_evoluir` after G4-1 and G4-3 — MShooting is now default;
+  adjust timeout or iteration count if the test becomes too slow
+- [ ] Re-run `test_scoreMShooting` after G4-2 — verify tests 1–3 still pass
+- [ ] Re-run `test_predictFreeRun` after G4-1 — bias shift may change absolute RMSE
+  thresholds; update limits if needed (the model should fit better with a bias term)
+- [ ] Re-run `test_ls` after G4-1 — `ls.m` is unchanged but the P matrix fed to it
+  is now wider; verify dimensions still flow correctly
+- [ ] Re-run `test_evoluirMimo` after G4-1 and G4-3
+
+---
+
+## G4-5. Full test suite validation
+
+- [ ] `run_tests.m` — all 10 tests pass
+- [ ] (manual) Run with MATLAB R2025b — no MATLAB-side errors
+
+---
+
+## G4-6. Document architectural differences in CLAUDE.md
+
+- [ ] Add "Known Parity Limitations (vs Python mggp)" section listing G4-A1 through G4-A4
+  with one-line explanation of each
+- [ ] Note in the GOALS 3 comparison protocol (`PROTOCOL.md`) that lag numbering differs:
+  Python `q_i` ≈ MATLAB `q_{i+1}` in absolute-lag terms; results are not directly comparable
+  at the term level, only at the quality metric level
+
+---
+
+## G4 Execution order
+
+```
+G4-0 (audit — done) → G4-1 (bias) ─┐
+                    → G4-2 (MShooting) ─┤→ G4-4 (tests) → G4-5 (suite) → G4-6 (docs)
+                    → G4-3 (defaults) ─┘
+```
+
+G4-1, G4-2, and G4-3 are independent and can be done in parallel.
+G4-4 depends on all three fixes being in place before re-running tests.

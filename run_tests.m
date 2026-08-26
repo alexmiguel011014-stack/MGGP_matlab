@@ -25,6 +25,7 @@ tests = {
     'dev/tests/test_lsGpu'
     'dev/tests/test_evoluirNsga2'
     'dev/tests/test_scoreMShooting'
+    'dev/tests/test_evoluirMimo'
 };
 
 falhas = 0;

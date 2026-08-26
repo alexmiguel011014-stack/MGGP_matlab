@@ -18,3 +18,7 @@ repomix-output.xml
 
 # Benchmark results (generated data)
 dev/benchmarks/results/
+
+# Comparison datasets (generated data)
+dev/comparison/data/
+dev/comparison/results/

@@ -31,6 +31,20 @@ extras — basta adicionar um campo novo ao struct.
 Os dados de entrada chegam como struct com campo `y` (saída) + campos com o nome de cada
 variável de entrada (ex: `vars.u1`, `vars.u2`). Não assumir nomes fixos `u`/`x`.
 
+### MIMO — múltiplas saídas
+- **`evoluirMimo.m`**: wrapper que itera sobre `config.nomesOutputs = {'y1','y2',...}`,
+  chama `evoluir` para cada saída. Cada sub-problema vê `vars.y = vars.(yi)` e as demais
+  saídas como regressores adicionais em `nomesEntradas`. Válido para fitness OSA (usa dados
+  medidos em cada passo). `config.nomesEntradas` deve conter apenas entradas **externas**.
+- **`predictFreeRunMimo.m`**: free-run acoplado — simula todas as saídas simultaneamente
+  passo a passo, usando valores já simulados de saídas anteriores como regressores.
+  `'y'` num termo de modelo `i` resolve para a coluna `i` de `Ys`; o nome de outra saída
+  (ex: `'y2'`) resolve para a coluna correspondente.
+- **Convenção de nomes nos termos MIMO**: ao treinar saída `y1`, termos `q1(y)` referenciam
+  `y1`; termos `q1(y2)` referenciam a saída `y2` medida. Durante free-run, ambas são
+  simuladas. Nunca renomear `y` para o nome da saída nos termos — a distinção é feita
+  pelo contexto de `evoluirMimo`/`predictFreeRunMimo`.
+
 ### Paralelismo
 - **CPU**: flag `config.usarParfor` em `evoluir.m` — ativa `parfor` na avaliação de
   fitness. Exige PCT; MATLAB lança erro claro sem fallback silencioso.
@@ -60,10 +74,12 @@ variável de entrada (ex: `vars.u1`, `vars.u2`). Não assumir nomes fixos `u`/`x
 - `test_lsGpu.m` pula (aviso) se não houver GPU CUDA disponível na máquina.
 
 ## Status atual (importante)
-**Todos os 9 testes passaram no MATLAB real (R2025b).** Suite completa: `run_tests`.
-Antes de qualquer mudança estrutural, re-rodar a suite. Ordem de dependência:
+**9 testes passaram no MATLAB real (R2025b); test_evoluirMimo pendente de validação.**
+Suite completa: `run_tests` (10 testes). Antes de qualquer mudança estrutural, re-rodar a
+suite. Ordem de dependência:
 `test_ls → test_predictFreeRun → test_MggpModel → test_operadoresGeneticos →
-test_evoluir → test_evoluir_parfor → test_lsGpu → test_evoluirNsga2 → test_scoreMShooting`.
+test_evoluir → test_evoluir_parfor → test_lsGpu → test_evoluirNsga2 →
+test_scoreMShooting → test_evoluirMimo`.
 Erros em camadas inferiores propagam como falhas confusas nas superiores.
 
 ## NSGA-II

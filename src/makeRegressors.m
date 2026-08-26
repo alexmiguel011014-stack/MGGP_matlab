@@ -32,10 +32,11 @@ function P = makeRegressors(vars, terms, maxDelay)
 %                resto do motor de GP; nao afeta o calculo em si).
 %
 %   SAIDA
-%     P - matriz de regressores, (N - maxLagUsado) x numel(terms).
-%         Cada coluna corresponde a um termo de TERMS, alinhada nas
-%         mesmas amostras (as primeiras maxLagUsado amostras de cada
-%         serie sao descartadas por nao terem historico suficiente).
+%     P - matriz de regressores, (N - maxLagUsado) x (numel(terms) + 1).
+%         Coluna 1 e sempre ones (termo de bias implicito, identico ao
+%         comportamento de IndividualMISO.makeRegressors na biblioteca
+%         Python original). Colunas 2..end correspondem aos termos de
+%         TERMS, alinhadas nas mesmas amostras validas.
 %
 %   Ver tambem: LS, PREDICTFREERUN
 
@@ -79,9 +80,9 @@ function P = makeRegressors(vars, terms, maxDelay)
             N, maxLagUsado);
     end
 
-    P = zeros(numAmostrasValidas, numTerms);
+    P = [ones(numAmostrasValidas, 1), zeros(numAmostrasValidas, numTerms)];
     for i = 1:numTerms
-        P(:, i) = avaliaTermo(terms{i}, vars, maxLagUsado, numAmostrasValidas);
+        P(:, i + 1) = avaliaTermo(terms{i}, vars, maxLagUsado, numAmostrasValidas);
     end
 end
 

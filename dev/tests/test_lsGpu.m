@@ -38,15 +38,16 @@ function test_lsGpu()
     rng(42);
 
     N = 500;
-    thetaVerdadeiro = [0.75; 0.25; -0.20];
+    % bias=0 explícito (theta tem nTerms+1 elementos pós G4-1)
+    thetaVerdadeiro = [0; 0.75; 0.25; -0.20];
     terms = {'q2(y)', 'q1(u)', 'q2(y)*q1(u)'};
 
     u = randn(N, 1);
     y = zeros(N, 1);
     for k = 3:N
-        y(k) = thetaVerdadeiro(1) * y(k-2) ...
-             + thetaVerdadeiro(2) * u(k-1) ...
-             + thetaVerdadeiro(3) * y(k-2) * u(k-1);
+        y(k) = thetaVerdadeiro(2) * y(k-2) ...
+             + thetaVerdadeiro(3) * u(k-1) ...
+             + thetaVerdadeiro(4) * y(k-2) * u(k-1);
     end
 
     vars = struct('y', y, 'u', u);

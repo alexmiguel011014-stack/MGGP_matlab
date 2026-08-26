@@ -17,8 +17,9 @@ function y = predictFreeRun(theta, terms, y0, inputs)
 %   um unico indice absoluto serve para y e para todas as entradas.
 %
 %   ENTRADAS
-%     theta  - vetor coluna numel(terms)x1, parametros do modelo (mesma
-%              ordem de TERMS; ver LS).
+%     theta  - vetor coluna (numel(terms)+1)x1, parametros do modelo.
+%              theta(1) e o bias (termo constante implicito, alinhado com
+%              MAKEREGRESSORS). theta(2:end) correspondem a TERMS.
 %     terms  - cell array de strings, mesma sintaxe de MAKEREGRESSORS
 %              ('q<k>(<nomeVar>)', '<nomeVar>', produtos com '*', ou '1').
 %     y0     - condicoes iniciais de y, vetor com pelo menos
@@ -40,9 +41,9 @@ function y = predictFreeRun(theta, terms, y0, inputs)
     y0 = y0(:);
     theta = theta(:);
 
-    if numel(terms) ~= numel(theta)
+    if numel(terms) + 1 ~= numel(theta)
         error('predictFreeRun:tamanhoInvalido', ...
-            'theta e terms devem ter o mesmo numero de elementos.');
+            'theta deve ter numel(terms)+1 elementos (bias + coeficientes dos termos).');
     end
 
     nomesEntradas = fieldnames(inputs);
@@ -89,9 +90,9 @@ function y = predictFreeRun(theta, terms, y0, inputs)
 
     for k = 1:numPassos
         idxAtual = offset + k; % mesmo indice absoluto em y e em varsCompletas.*
-        acumulado = 0;
+        acumulado = theta(1); % bias
         for i = 1:numel(terms)
-            acumulado = acumulado + theta(i) * avaliaTermoNoInstante( ...
+            acumulado = acumulado + theta(i + 1) * avaliaTermoNoInstante( ...
                 terms{i}, y, varsCompletas, idxAtual);
         end
         y(idxAtual) = acumulado;

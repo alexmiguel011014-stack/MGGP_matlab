@@ -43,7 +43,8 @@ function test_MggpModel()
     % anteriores.
     rng(42);
     N = 500;
-    thetaVerdadeiro = [0.75; 0.25; -0.20];
+    % bias=0 explícito (theta tem nTerms+1 elementos pós G4-1)
+    thetaVerdadeiro = [0; 0.75; 0.25; -0.20];
 
     u = randn(N, 1);
     y0 = zeros(2, 1);

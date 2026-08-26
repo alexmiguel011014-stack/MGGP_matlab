@@ -75,7 +75,7 @@ classdef MggpModel
         end
 
         function n = numTermos(obj)
-            %NUMTERMOS Numero de termos do modelo (= numel(theta) esperado).
+            %NUMTERMOS Numero de termos GP do modelo (numel(theta) = numTermos()+1: bias+coefs).
             n = numel(obj.termos);
         end
 

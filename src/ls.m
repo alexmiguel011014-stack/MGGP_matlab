@@ -13,7 +13,10 @@ function [theta, P, yAlinhado] = ls(vars, terms, maxDelay)
 %         entrada usada em TERMS.
 %
 %   SAIDAS
-%     theta     - vetor coluna numel(terms)x1 com os parametros estimados.
+%     theta     - vetor coluna (numel(terms)+1)x1: theta(1) e o bias
+%                 (coluna de ones em P), theta(2:end) sao os coeficientes
+%                 dos termos em TERMS. Alinhado com MAKEREGRESSORS e
+%                 PREDICTFREERUN.
 %     P         - matriz de regressores usada (retornada para inspecao/
 %                 reuso, evita remontar se o chamador precisar dela).
 %     yAlinhado - y recortado na mesma janela de amostras validas de P,

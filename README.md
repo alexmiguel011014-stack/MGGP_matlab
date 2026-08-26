@@ -51,11 +51,11 @@ dev/tests/       Testes unitários (um por módulo, mesma ordem de dependência)
 
 ### Modo de fitness
 
-Por padrão `evoluir` usa fitness OSA. Para ativar o modo MShooting (janelas de free-run, mais exigente — padrão da biblioteca Python):
+Por padrão `evoluir` usa fitness **MShooting** (janelas de free-run — padrão da biblioteca Python original). Para usar OSA (mais rápido, menos exigente):
 
 ```matlab
-config.tipoFitness    = 'mShooting';  % 'osa' (default) | 'mShooting'
-config.janelaMShooting = 5;           % tamanho da janela em amostras (default 5)
+config.tipoFitness    = 'osa';        % 'mShooting' (default) | 'osa'
+config.janelaMShooting = 5;           % tamanho da janela (default 5, só usado com mShooting)
 ```
 
 ## Referências

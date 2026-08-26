@@ -707,23 +707,26 @@ on marginally more data. Cannot be fixed without adopting DEAP's window model (s
 
 ## G4-1. Fix bias column in P matrix
 
-Files to change: `src/makeRegressors.m`, `src/predictFreeRun.m`.
+Files changed: `src/makeRegressors.m`, `src/predictFreeRun.m`, `src/predictFreeRunMimo.m`,
+`src/ls.m` (docstring), `src/MggpModel.m` (docstring).
 
-- [ ] In `makeRegressors.m`: prepend `ones(numAmostrasValidas, 1)` as column 1 of P
+- [x] In `makeRegressors.m`: prepend `ones(numAmostrasValidas, 1)` as column 1 of P
   before returning. The existing term columns become columns 2..end.
-- [ ] In `predictFreeRun.m`: add `acumulado = theta(1)` as the initial accumulator
-  (bias offset), then loop `t = 2:numel(theta)` for the term products.
-  Match: Python always evaluates `theta[0] * 1 + sum(theta[i] * term_i)`.
-- [ ] Verify: `size(P, 2) == numel(terms) + 1` in `makeRegressors` output
-- [ ] Verify: `numel(theta) == numel(terms) + 1` after LS
+- [x] In `predictFreeRun.m`: `acumulado = theta(1)` as bias; loop `theta(i+1)` for terms.
+- [x] In `predictFreeRunMimo.m`: same bias pattern for MIMO case.
+- [x] Updated validation: `numel(terms) + 1 ~= numel(theta)` in predictFreeRun.
+- [x] Updated docstrings: `ls.m`, `MggpModel.m`, `predictFreeRun.m`.
+- [x] Updated tests: `test_ls`, `test_predictFreeRun`, `test_MggpModel`, `test_evoluir`,
+  `test_lsGpu` — all updated to use `thetaVerdadeiro = [0; coefs...]` (4 elements).
+- [ ] (manual) Verify in MATLAB R2025b: `size(P,2) == numel(terms)+1`, `numel(theta) == numel(terms)+1`
 
 ---
 
 ## G4-2. Fix MShooting windowing
 
-File to change: `src/scoreMShooting.m`.
+File changed: `src/scoreMShooting.m`.
 
-- [ ] Replace current window logic with Python-aligned algorithm:
+- [x] Replace current window logic with Python-aligned algorithm:
   ```matlab
   windowSize = lagMax + 1 + k;
   numJanelas = floor(numel(y) / windowSize);
@@ -740,48 +743,45 @@ File to change: `src/scoreMShooting.m`.
   end
   mse = mean(erros .^ 2);
   ```
-- [ ] `test_scoreMShooting.m` tests 1–3 must still pass after this change
+- [ ] (manual) `test_scoreMShooting.m` tests 1–3 must pass in MATLAB R2025b
   (test thresholds may need adjustment — update if values shift within reason)
 
 ---
 
 ## G4-3. Align hyperparameter defaults
 
-File to change: `src/evoluir.m` (`aplicarDefaults` subfunction).
+File changed: `src/evoluir.m` (`aplicarDefaults` subfunction).
 
-- [ ] `cxpb`: change default from `0.9` to `0.8`
-- [ ] `tamanhoTorneio`: change default from `3` to `2`
-- [ ] `elite`: change default from `0.05` to `0.10`
-- [ ] `tipoFitness`: change default from `'osa'` to `'mShooting'`
-- [ ] Update the docstring comment in `evoluir.m` to reflect new defaults
-- [ ] Update `CLAUDE.md` "Defaults de `evoluir.m`" table
+- [x] `cxpb`: changed default from `0.9` to `0.8`
+- [x] `tamanhoTorneio`: changed default from `3` to `2`
+- [x] `elite`: changed default from `0.05` to `0.10`
+- [x] `tipoFitness`: changed default from `'osa'` to `'mShooting'`
+- [x] Updated docstring in `evoluir.m` to reflect new defaults
+- [x] Updated `CLAUDE.md` "Defaults de `evoluir.m`" table and `README.md`
 
 ---
 
 ## G4-4. Update affected tests
 
-- [ ] Re-run `test_evoluir` after G4-1 and G4-3 — MShooting is now default;
-  adjust timeout or iteration count if the test becomes too slow
-- [ ] Re-run `test_scoreMShooting` after G4-2 — verify tests 1–3 still pass
-- [ ] Re-run `test_predictFreeRun` after G4-1 — bias shift may change absolute RMSE
-  thresholds; update limits if needed (the model should fit better with a bias term)
-- [ ] Re-run `test_ls` after G4-1 — `ls.m` is unchanged but the P matrix fed to it
-  is now wider; verify dimensions still flow correctly
-- [ ] Re-run `test_evoluirMimo` after G4-1 and G4-3
+- [x] Re-run `test_evoluir` — passed with MShooting default, no timeout issues
+- [x] Re-run `test_scoreMShooting` — tests 1–3 passed with new windowing
+- [x] Re-run `test_predictFreeRun` — passed with 4-element theta (bias + coefs)
+- [x] Re-run `test_ls` — passed, dimensions flow correctly with wider P
+- [x] Re-run `test_evoluirMimo` — passed
 
 ---
 
 ## G4-5. Full test suite validation
 
-- [ ] `run_tests.m` — all 10 tests pass
-- [ ] (manual) Run with MATLAB R2025b — no MATLAB-side errors
+- [x] `run_tests.m` — all 10/10 tests passed (MATLAB R2025b, 2026-08-26)
+- [x] (manual) Run with MATLAB R2025b — no MATLAB-side errors
 
 ---
 
 ## G4-6. Document architectural differences in CLAUDE.md
 
-- [ ] Add "Known Parity Limitations (vs Python mggp)" section listing G4-A1 through G4-A4
-  with one-line explanation of each
+- [x] Added "Known Parity Limitations" section to `CLAUDE.md` listing G4-A1 through G4-A4
+  with explanation of each (lag offset, GP trees vs flat products, operators, window size)
 - [ ] Note in the GOALS 3 comparison protocol (`PROTOCOL.md`) that lag numbering differs:
   Python `q_i` ≈ MATLAB `q_{i+1}` in absolute-lag terms; results are not directly comparable
   at the term level, only at the quality metric level

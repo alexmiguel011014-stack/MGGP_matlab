@@ -97,9 +97,9 @@ function Ys = predictFreeRunMimo(modelos, thetas, Y0, inputs, nomesOutputs)
         for i = 1:nOut
             terms_i = allTerms{i};
             theta_i = thetas{i}(:);
-            acumulado = 0;
+            acumulado = theta_i(1); % bias (theta(1) sempre, alinhado com makeRegressors)
             for t = 1:numel(terms_i)
-                acumulado = acumulado + theta_i(t) * ...
+                acumulado = acumulado + theta_i(t + 1) * ...
                     avaliaTermoMimo(terms_i{t}, Ys, i, nomesOutputs, varsExt, idxAtual);
             end
             Ys(idxAtual, i) = acumulado;

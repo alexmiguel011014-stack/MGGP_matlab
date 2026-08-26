@@ -40,8 +40,12 @@ function mse = scoreMShooting(theta, terms, vars, maxDelay, k)
 
     lagMax = maxDelay;
 
-    numValidSamples = N - lagMax;
-    numJanelas = floor(numValidSamples / k);
+    % Windowing alinhado com a biblioteca Python original:
+    % window = lagMax+1 amostras de CI + k amostras de predicao.
+    % Janelas comecam no inicio da serie (nao apos lagMax amostras),
+    % espelhando miso_MShooting em src/predictors.py (CastroHc/MGGP).
+    windowSize = lagMax + 1 + k;
+    numJanelas = floor(N / windowSize);
 
     if numJanelas < 1
         mse = Inf;
@@ -51,11 +55,11 @@ function mse = scoreMShooting(theta, terms, vars, maxDelay, k)
     errosQuad = zeros(numJanelas * k, 1);
 
     for w = 1:numJanelas
-        winStart = lagMax + 1 + (w - 1) * k;
-        winEnd   = winStart + k - 1;
-
-        % Condicoes iniciais: ultimos lagMax valores reais de y antes da janela.
-        y0 = y(winStart - lagMax : winStart - 1);
+        ini      = (w - 1) * windowSize + 1;
+        % CI: lagMax+1 amostras (igual ao Python que usa lagMax+1)
+        y0       = y(ini : ini + lagMax);
+        winStart = ini + lagMax + 1;
+        winEnd   = ini + lagMax + k;
 
         % Entradas reais para esta janela.
         winInputs = struct();

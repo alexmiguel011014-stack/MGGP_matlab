@@ -782,6 +782,7 @@ File changed: `src/evoluir.m` (`aplicarDefaults` subfunction).
 
 - [x] Added "Known Parity Limitations" section to `CLAUDE.md` listing G4-A1 through G4-A4
   with explanation of each (lag offset, GP trees vs flat products, operators, window size)
+- [ ] (manual) Review the G4-A1..A4 descriptions in `CLAUDE.md` for accuracy
 - [ ] Note in the GOALS 3 comparison protocol (`PROTOCOL.md`) that lag numbering differs:
   Python `q_i` ≈ MATLAB `q_{i+1}` in absolute-lag terms; results are not directly comparable
   at the term level, only at the quality metric level

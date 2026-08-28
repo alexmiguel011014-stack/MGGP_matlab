@@ -1,0 +1,14 @@
+numpy
+pandas
+openpyxl
+deap
+tqdm
+ipython
+numba
+scikit-learn
+dill
+joblib
+pathos
+jupyter
+notebook
+ipywidgets

@@ -16,8 +16,17 @@ repomix-output.xml
 # Secrets
 .env
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Benchmark results (generated data)
 dev/benchmarks/results/
+mggptestePYTHON/resultados/*
+!mggptestePYTHON/resultados/.gitkeep
+mggptesteMATLAB/resultados/*
+!mggptesteMATLAB/resultados/.gitkeep
 
 # Comparison datasets (generated data)
 dev/comparison/data/

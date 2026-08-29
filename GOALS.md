@@ -981,8 +981,8 @@ File changed: `mggptesteMATLAB/src/evoluir.m` (the local copy, not the main repo
 
 - [x] Copy `mggptestePYTHONCUDA/` into `D:\ProjetosPessoais\MGGP_Vmatlab\mggptestePYTHONCUDA\`
 - [x] Update `.gitignore` to add `mggptestePYTHONCUDA/resultados/*` pattern
-- [ ] Stage and commit: `feat: add Python CUDA benchmark package + MATLAB GPU integration`
-- [ ] Push to `origin/main`
+- [x] Stage and commit: `feat: add Python CUDA benchmark package + MATLAB GPU integration`
+- [x] Push to `origin/main`
 
 ---
 

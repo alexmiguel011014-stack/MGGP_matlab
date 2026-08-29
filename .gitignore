@@ -27,6 +27,8 @@ mggptestePYTHON/resultados/*
 !mggptestePYTHON/resultados/.gitkeep
 mggptesteMATLAB/resultados/*
 !mggptesteMATLAB/resultados/.gitkeep
+mggptestePYTHONCUDA/resultados/*
+!mggptestePYTHONCUDA/resultados/.gitkeep
 
 # Comparison datasets (generated data)
 dev/comparison/data/

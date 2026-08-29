@@ -799,3 +799,205 @@ G4-0 (audit — done) → G4-1 (bias) ─┐
 
 G4-1, G4-2, and G4-3 are independent and can be done in parallel.
 G4-4 depends on all three fixes being in place before re-running tests.
+
+---
+
+# GOALS 5 — Third Benchmark Package: Python CUDA (CPU + GPU)
+
+**Goal:** create `mggptestePYTHONCUDA/` — a self-contained benchmark package where the
+Python MGGP library uses CuPy for GPU-accelerated matrix operations (LS solve + prediction),
+making the three-way competition fair:
+
+| Package | CPU | GPU |
+|---|---|---|
+| `mggptestePYTHON` | pathos multiprocess (all cores) | — |
+| `mggptestePYTHONCUDA` | single process (no multiprocess + GPU) | CuPy (CUDA) |
+| `mggptesteMATLAB` | parfor (all cores) OR lsGpu (CUDA) | lsGpu (integration pending) |
+
+Also completes the MATLAB GPU integration (GOALS 1 §7 stretch goal), so `mggptesteMATLAB`
+can run in either `parfor` mode or `lsGpu` mode depending on available hardware.
+
+```mermaid
+flowchart TD
+    A[G5-0 Design rationale] --> B[G5-1 mggptestePYTHONCUDA package]
+    A --> C[G5-2 MATLAB lsGpu integration]
+    B --> D[G5-3 CuPy fallback & smoke test]
+    C --> D
+    D --> E[G5-4 Ship to repo]
+```
+
+---
+
+## G5-0. Design rationale — read before implementing
+
+**Where GPU helps in MGGP:**
+DEAP's GP tree operations (crossover, mutation, selection) are purely Python — no GPU benefit.
+The two GPU-acceleratable hot paths are:
+1. **LS solve** — `P \ y` where `P` is `(N − lagMax) × (nTerms + 1)`. For competition params
+   (N≈1000, nTerms=7), P is ~950×8 — very small; GPU overhead may dominate over benefit.
+   GPU becomes net positive for N > 5000 or p > 50 (see GOALS 1 §3d crossover analysis).
+2. **MShooting prediction** — `numJanelas × k` free-run steps, each involving a dot product
+   over `nTerms` regressors. Also small per individual but can be batched across the population.
+
+**CuPy strategy (individual-level GPU):**
+- Replace `np.linalg.lstsq` with `cp.linalg.lstsq` in `base.py`'s `leastSquares()`
+- Replace numpy array construction in `predictors.py`'s `miso_MShooting` with CuPy arrays
+- Keep DEAP population management and GP operators on CPU (they cannot run on GPU)
+- No multiprocessing (one GPU context per process; pathos workers cannot share a GPU safely)
+- Pass `n_jobs=1` (single process) + `use_cuda=True` to distinguish from the CPU package
+
+**MATLAB GPU strategy:**
+- Add `config.usarGpu = false` default to `evoluir.m`
+- When `usarGpu=true`: call `lsGpu(vars, terms, maxDelay)` instead of `ls(...)` in
+  `avaliarIndividuo` — one-line change; `lsGpu.m` already exists and works in isolation
+- Cannot combine `usarParfor=true` + `usarGpu=true` reliably (parfor workers each need their
+  own GPU context; requires PCT Advanced license feature that may not be present)
+- `mggptesteMATLAB/bench_matlab.m` gets a `config.usarGpu` flag in its config block
+- For the competition, run two MATLAB modes: `parfor`-only (existing) and `lsGpu`-only (new)
+
+**Out of scope:**
+- Batched population-level GPU (entire population as one GPU kernel) — requires restructuring
+  `avaliarPopulacao`; tracked as G4-7 stretch goal
+- Multi-GPU support
+- Matching Python DEAP GP tree structure in CUDA
+- CuPy for MATLAB (not a thing; `lsGpu.m` already handles this natively)
+
+---
+
+## G5-1. Create `mggptestePYTHONCUDA/`
+
+Start from a full copy of `mggptestePYTHON/` — same structure, different library modifications.
+
+- [ ] Create `D:\ProjetosPessoais\IC\mggptestePYTHONCUDA\` with subdirs `src/`, `resultados/`
+- [ ] Copy all `.py` files from `mggptestePYTHON/src/` → `mggptestePYTHONCUDA/src/`
+- [ ] Copy `bench_python.py`, `bench_python.ipynb`, `run.bat`, `setup.bat` → adapt paths
+  - Change `RESULTS_DIR` to point to `.\resultados\`
+  - In the PARAMS dict: set `n_jobs=1` (no multiprocessing) and `use_cuda=True`
+  - Print GPU info at startup: `cp.cuda.runtime.getDeviceCount()` and device name
+- [ ] Create `requirements.txt` with CuPy added:
+  ```
+  numpy pandas openpyxl deap tqdm ipython dill joblib jupyter notebook ipywidgets
+  cupy-cuda12x   # adjust to the target machine's CUDA version (11x, 12x, etc.)
+  ```
+- [ ] Create `requirements_cuda11.txt` (same but `cupy-cuda11x`) for machines with CUDA 11
+- [ ] `setup.bat`: after pip install, print `python -c "import cupy; print(cupy.cuda.runtime.getDeviceCount(), 'GPU(s) found')"` as a smoke test
+- [ ] Create `resultados/.gitkeep` (outputs gitignored, placeholder committed)
+
+---
+
+## G5-2. Modify `src/mggp.py` and `src/base.py` for CuPy
+
+Files modified: `mggptestePYTHONCUDA/src/mggp.py`, `mggptestePYTHONCUDA/src/base.py`,
+`mggptestePYTHONCUDA/src/predictors.py`.
+
+**`mggp.py` — add `use_cuda` parameter:**
+- [ ] Add `use_cuda: bool = False` to `__init__` signature
+- [ ] Store `self.use_cuda = use_cuda`
+- [ ] When `use_cuda=True`: force `n_jobs=1` (cannot mix multiprocessing + GPU), print warning if user passes `n_jobs != 1`
+- [ ] Pass `use_cuda` down to `evaluation()` via `self.use_cuda`
+
+**`base.py` — GPU-aware `leastSquares()`:**
+- [ ] In `IndividualMISO.leastSquares` (and MIMO variant): wrap with CuPy try/except:
+  ```python
+  if getattr(self, '_use_cuda', False):
+      try:
+          import cupy as cp
+          import cupy.linalg as cpla
+          Pgpu = cp.asarray(P)
+          ygpu = cp.asarray(y_aligned)
+          theta_gpu, _, _, _ = cpla.lstsq(Pgpu, ygpu, rcond=None)
+          return cp.asnumpy(theta_gpu)
+      except (ImportError, cp.cuda.runtime.CUDARuntimeError):
+          pass   # fallback to CPU below
+  return np.linalg.lstsq(P, y_aligned, rcond=None)[0]
+  ```
+- [ ] `_use_cuda` flag set on the individual during `evaluation()` call: `ind._use_cuda = self.use_cuda`
+
+**`predictors.py` — GPU-aware MShooting:**
+- [ ] In `miso_MShooting`: when `use_cuda=True`, convert the regressor matrix P and y to
+  `cp.asarray(...)` before solving, convert result back with `cp.asnumpy(...)`
+- [ ] All other prediction logic stays on CPU (free-run loop with scalar indexing — GPU overhead
+  would dominate; only the LS step benefits)
+
+---
+
+## G5-3. Complete MATLAB GPU integration in `evoluir.m`
+
+File changed: `mggptesteMATLAB/src/evoluir.m` (the local copy, not the main repo's `src/`).
+
+- [ ] Add `'usarGpu', false` to `aplicarDefaults` in `evoluir.m`
+- [ ] In `avaliarIndividuo` local function: add branch
+  ```matlab
+  if config.usarGpu
+      [theta, ~, ~] = lsGpu(vars, model.compile(), model.maiorAtraso());
+  else
+      [theta, ~, ~] = ls(vars, model.compile(), model.maiorAtraso());
+  end
+  ```
+- [ ] Add guard: if `config.usarGpu && config.usarParfor`, error with message
+  "usarGpu e usarParfor nao podem ser ativos ao mesmo tempo — parfor workers nao compartilham contexto GPU"
+- [ ] Update `mggptesteMATLAB/bench_matlab.m`: add commented-out GPU config block
+  ```matlab
+  % Para rodar em modo GPU (exige CUDA + PCT):
+  % config.usarParfor = false;
+  % config.usarGpu    = true;
+  ```
+  Keep `usarParfor=true`, `usarGpu=false` as defaults (CPU mode unchanged)
+
+---
+
+## G5-4. Smoke test — verify without running the full factory
+
+- [ ] **Python CUDA smoke test** (run in terminal after setup.bat):
+  ```python
+  # from mggptestePYTHONCUDA/
+  import sys; sys.path.insert(0,'.')
+  import cupy as cp
+  from src.base import Element
+  print(f"CuPy OK — {cp.cuda.runtime.getDeviceCount()} GPU(s)")
+  # Run 2 generations, pop=10, to verify end-to-end without full factory
+  import numpy as np; u=np.random.randn(200,5); y=np.random.randn(200,2)
+  from src.mggp import MGGP
+  m=MGGP(inputs=u,outputs=y,generations=2,populationSize=10,mode='MIMO',use_cuda=True,n_jobs=1)
+  m.run(); print("CUDA smoke test PASSED")
+  ```
+- [ ] **MATLAB GPU smoke test** (run in MATLAB):
+  ```matlab
+  % from mggptesteMATLAB/
+  addpath('src')
+  garantirGpuDisponivel()  % errors if no GPU
+  % minimal evoluir call with usarGpu=true
+  vars.y=randn(200,1); vars.u1=randn(200,1);
+  cfg.vars=vars; cfg.nomesEntradas={'u1'}; cfg.maxFatoresPorTermo=2;
+  cfg.popSize=10; cfg.nGeracoes=2; cfg.usarGpu=true; cfg.usarParfor=false;
+  [m,t,h]=evoluir(cfg);
+  disp('GPU smoke test PASSED')
+  ```
+  - [ ] (manual) Run on a machine with CUDA GPU; skip on CPU-only machines
+
+---
+
+## G5-5. Add to repo
+
+- [ ] Copy `mggptestePYTHONCUDA/` into `D:\ProjetosPessoais\MGGP_Vmatlab\mggptestePYTHONCUDA\`
+- [ ] Update `.gitignore` to add `mggptestePYTHONCUDA/resultados/*` pattern
+- [ ] Stage and commit: `feat: add Python CUDA benchmark package + MATLAB GPU integration`
+- [ ] Push to `origin/main`
+
+---
+
+## G5 Execution order
+
+```
+G5-0 (design) → G5-1 (package structure) ─┐
+              → G5-2 (CuPy mods)         ─┤→ G5-4 (smoke tests) → G5-5 (ship)
+              → G5-3 (MATLAB lsGpu)      ─┘
+```
+
+G5-1, G5-2, and G5-3 are independent once the design is settled. G5-4 requires G5-1+G5-2
+(Python side) and G5-3 (MATLAB side) to be complete. G5-5 comes last.
+
+**Hardware note:** G5-4 CUDA smoke tests require a machine with an NVIDIA GPU + CUDA toolkit.
+If the development machine has no GPU, stub out the smoke test with a
+`try/except CUDARuntimeError → print("No GPU found — skipping CUDA test")` guard so the
+package at least imports cleanly on CPU-only machines.

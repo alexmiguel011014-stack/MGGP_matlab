@@ -31,5 +31,7 @@ mggptestePYTHONCUDA/resultados/*
 !mggptestePYTHONCUDA/resultados/.gitkeep
 
 # Comparison datasets (generated data)
-dev/comparison/data/
-dev/comparison/results/
+dev/comparison/data/*
+!dev/comparison/data/.gitkeep
+dev/comparison/results/*
+!dev/comparison/results/.gitkeep

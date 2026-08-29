@@ -75,7 +75,11 @@ config.tipoFitness          = 'mShooting';
 config.janelaMShooting      = 300;
 config.verbose              = true;
 config.verbose_timing       = false;
-config.usarParfor           = true;    % parfor na avaliação de fitness (exige PCT)
+config.usarParfor           = true;    % parfor na avaliacao de fitness (exige PCT)
+config.usarGpu              = false;   % GPU via lsGpu (exige CUDA); mutex com usarParfor
+% --- Para rodar em modo GPU (exige CUDA Toolkit + PCT):
+% config.usarParfor = false;
+% config.usarGpu    = true;
 config.nomesOutputs         = {'y1', 'y2'};
 config.nomesEntradas        = {'u1', 'u2', 'u3', 'u4', 'u5'};
 

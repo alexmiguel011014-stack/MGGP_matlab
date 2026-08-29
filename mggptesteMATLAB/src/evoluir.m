@@ -146,7 +146,17 @@ function config = aplicarDefaults(config)
         'janelaMShooting', 5, ...
         'verbose', true, ...
         'verbose_timing', false, ...
-        'usarParfor', false);
+        'usarParfor', false, ...
+        'usarGpu', false);
+
+    % Mutex: usarGpu e usarParfor nao podem ser ativos ao mesmo tempo.
+    % parfor workers nao compartilham contexto GPU de forma segura.
+    if isfield(config, 'usarGpu') && isfield(config, 'usarParfor') && ...
+            config.usarGpu && config.usarParfor
+        error('evoluir:configInvalida', ...
+            'usarGpu e usarParfor nao podem ser ativos ao mesmo tempo — ' + ...
+            'parfor workers nao compartilham contexto GPU.');
+    end
 
     nomesDefaults = fieldnames(defaults);
     for i = 1:numel(nomesDefaults)
@@ -217,7 +227,11 @@ function fitness = avaliarIndividuo(individuo, vars, config)
 %
 %   Despacha para SCOREOSA ou SCOREMSHOOTING conforme config.tipoFitness.
     try
-        theta = individuo.estimarTheta(vars);
+        if config.usarGpu
+            [theta, ~, ~] = lsGpu(vars, individuo.compile(), individuo.maiorAtraso());
+        else
+            theta = individuo.estimarTheta(vars);
+        end
         switch config.tipoFitness
             case 'osa'
                 fitness = individuo.avaliarFitness(theta, vars);

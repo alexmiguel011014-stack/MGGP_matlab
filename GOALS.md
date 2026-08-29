@@ -439,13 +439,13 @@ flowchart TD
 
 ## G3-2. Shared comparison protocol — dataset and params
 
-- [ ] Create `dev/comparison/data/` directory (gitignored — generated data)
+- [x] Create `dev/comparison/data/` directory (gitignored — generated data)
   - Add `dev/comparison/data/` to `.gitignore`
-- [ ] Write `dev/comparison/generate_dataset.m` — generates `siso_ref.csv` with columns `y,u1`
+- [x] Write `dev/comparison/generate_dataset.m` — generates `siso_ref.csv` with columns `y,u1`
   (N=1000, rng(42), the same SISO system used in bench_siso)
-- [ ] Write `dev/comparison/generate_dataset.py` — reads `siso_ref.csv` (Python doesn't generate it;
+- [x] Write `dev/comparison/generate_dataset.py` — reads `siso_ref.csv` (Python doesn't generate it;
   both sides use the same CSV to guarantee bit-for-bit identical inputs)
-- [ ] Document the agreed hyperparameter mapping in `dev/comparison/PROTOCOL.md`:
+- [x] Document the agreed hyperparameter mapping in `dev/comparison/PROTOCOL.md`:
 
   | MATLAB field | Python param | Value used |
   |---|---|---|
@@ -462,34 +462,34 @@ flowchart TD
 
 ## G3-3. Python benchmark harness
 
-- [ ] Create `dev/comparison/bench_python.py` — standalone script (no notebook dependency):
+- [x] Create `dev/comparison/bench_python.py` — standalone script (no notebook dependency):
   - Reads `data/siso_ref.csv`
   - Runs `MGGP` for each seed with the agreed params
   - Records: wall time (`time.perf_counter`), OSA-RMSE on val, FR-RMSE on val, convergence gen
   - Records peak RAM with `tracemalloc` (stdlib, no extra install)
   - Saves `results/python_bench_<timestamp>.json`
 - [ ] Create `dev/comparison/requirements.txt` pinning the exact `mggp` version used
-- [ ] Document how to run: `python bench_python.py` from `dev/comparison/`
+- [ ] Document how to run: `python bench_python.py` from `dev/comparison/` (see PROTOCOL.md)
 - [ ] (manual) Run `bench_python.py` and confirm it completes without error
 
 ---
 
 ## G3-4. MATLAB benchmark harness
 
-- [ ] Create `dev/comparison/bench_matlab_vs_python.m`:
+- [x] Create `dev/comparison/bench_matlab_vs_python.m`:
   - Reads `data/siso_ref.csv` (using `readtable`)
   - Runs `evoluir` for each seed with the agreed params
   - Records: wall time (`tic/toc`), OSA-RMSE (val), FR-RMSE (val), convergence gen
   - Records peak RAM via `feature('memstats')` (Windows) or `memory` function
-  - Saves `results/matlab_bench_<timestamp>.json` via `salvarBenchJson`
-- [ ] Add parfor variant: also run with `config.usarParfor=true` and record separately
+  - Saves `results/matlab_bench_<timestamp>.json`
+- [x] Add parfor variant: also run with `config.usarParfor=true` and record separately
 - [ ] (manual) Run `bench_matlab_vs_python.m` from MATLAB and confirm it completes
 
 ---
 
 ## G3-5. Collect and compare metrics
 
-- [ ] Create `dev/comparison/compare_results.m`:
+- [x] Create `dev/comparison/compare_results.m`:
   - Reads the latest `python_bench_*.json` and `matlab_bench_*.json` from `results/`
   - Prints a markdown comparison table (wall time, throughput, RAM, RMSE, convergence gen)
   - Computes speedup: `t_python / t_matlab_seq` and `t_python / t_matlab_par`
@@ -783,7 +783,7 @@ File changed: `src/evoluir.m` (`aplicarDefaults` subfunction).
 - [x] Added "Known Parity Limitations" section to `CLAUDE.md` listing G4-A1 through G4-A4
   with explanation of each (lag offset, GP trees vs flat products, operators, window size)
 - [ ] (manual) Review the G4-A1..A4 descriptions in `CLAUDE.md` for accuracy
-- [ ] Note in the GOALS 3 comparison protocol (`PROTOCOL.md`) that lag numbering differs:
+- [x] Note in the GOALS 3 comparison protocol (`PROTOCOL.md`) that lag numbering differs:
   Python `q_i` ≈ MATLAB `q_{i+1}` in absolute-lag terms; results are not directly comparable
   at the term level, only at the quality metric level
 
@@ -868,20 +868,20 @@ The two GPU-acceleratable hot paths are:
 
 Start from a full copy of `mggptestePYTHON/` — same structure, different library modifications.
 
-- [ ] Create `D:\ProjetosPessoais\IC\mggptestePYTHONCUDA\` with subdirs `src/`, `resultados/`
-- [ ] Copy all `.py` files from `mggptestePYTHON/src/` → `mggptestePYTHONCUDA/src/`
-- [ ] Copy `bench_python.py`, `bench_python.ipynb`, `run.bat`, `setup.bat` → adapt paths
+- [x] Create `D:\ProjetosPessoais\IC\mggptestePYTHONCUDA\` with subdirs `src/`, `resultados/`
+- [x] Copy all `.py` files from `mggptestePYTHON/src/` → `mggptestePYTHONCUDA/src/`
+- [x] Copy `bench_python.py`, `bench_python.ipynb`, `run.bat`, `setup.bat` → adapt paths
   - Change `RESULTS_DIR` to point to `.\resultados\`
   - In the PARAMS dict: set `n_jobs=1` (no multiprocessing) and `use_cuda=True`
   - Print GPU info at startup: `cp.cuda.runtime.getDeviceCount()` and device name
-- [ ] Create `requirements.txt` with CuPy added:
+- [x] Create `requirements.txt` with CuPy added:
   ```
   numpy pandas openpyxl deap tqdm ipython dill joblib jupyter notebook ipywidgets
   cupy-cuda12x   # adjust to the target machine's CUDA version (11x, 12x, etc.)
   ```
-- [ ] Create `requirements_cuda11.txt` (same but `cupy-cuda11x`) for machines with CUDA 11
-- [ ] `setup.bat`: after pip install, print `python -c "import cupy; print(cupy.cuda.runtime.getDeviceCount(), 'GPU(s) found')"` as a smoke test
-- [ ] Create `resultados/.gitkeep` (outputs gitignored, placeholder committed)
+- [x] Create `requirements_cuda11.txt` (same but `cupy-cuda11x`) for machines with CUDA 11
+- [x] `setup.bat`: after pip install, print `python -c "import cupy; print(cupy.cuda.runtime.getDeviceCount(), 'GPU(s) found')"` as a smoke test
+- [x] Create `resultados/.gitkeep` (outputs gitignored, placeholder committed)
 
 ---
 
@@ -891,13 +891,13 @@ Files modified: `mggptestePYTHONCUDA/src/mggp.py`, `mggptestePYTHONCUDA/src/base
 `mggptestePYTHONCUDA/src/predictors.py`.
 
 **`mggp.py` — add `use_cuda` parameter:**
-- [ ] Add `use_cuda: bool = False` to `__init__` signature
-- [ ] Store `self.use_cuda = use_cuda`
-- [ ] When `use_cuda=True`: force `n_jobs=1` (cannot mix multiprocessing + GPU), print warning if user passes `n_jobs != 1`
-- [ ] Pass `use_cuda` down to `evaluation()` via `self.use_cuda`
+- [x] Add `use_cuda: bool = False` to `__init__` signature
+- [x] Store `self.use_cuda = use_cuda`
+- [x] When `use_cuda=True`: force `n_jobs=1` (cannot mix multiprocessing + GPU), print warning if user passes `n_jobs != 1`
+- [x] Pass `use_cuda` down to `evaluation()` via `self.use_cuda`
 
 **`base.py` — GPU-aware `leastSquares()`:**
-- [ ] In `IndividualMISO.leastSquares` (and MIMO variant): wrap with CuPy try/except:
+- [x] In `IndividualMISO.leastSquares` (and MIMO variant): wrap with CuPy try/except:
   ```python
   if getattr(self, '_use_cuda', False):
       try:
@@ -911,12 +911,12 @@ Files modified: `mggptestePYTHONCUDA/src/mggp.py`, `mggptestePYTHONCUDA/src/base
           pass   # fallback to CPU below
   return np.linalg.lstsq(P, y_aligned, rcond=None)[0]
   ```
-- [ ] `_use_cuda` flag set on the individual during `evaluation()` call: `ind._use_cuda = self.use_cuda`
+- [x] `_use_cuda` flag set on the individual during `evaluation()` call: `ind._use_cuda = self.use_cuda`
 
 **`predictors.py` — GPU-aware MShooting:**
-- [ ] In `miso_MShooting`: when `use_cuda=True`, convert the regressor matrix P and y to
+- [x] In `miso_MShooting`: when `use_cuda=True`, convert the regressor matrix P and y to
   `cp.asarray(...)` before solving, convert result back with `cp.asnumpy(...)`
-- [ ] All other prediction logic stays on CPU (free-run loop with scalar indexing — GPU overhead
+- [x] All other prediction logic stays on CPU (free-run loop with scalar indexing — GPU overhead
   would dominate; only the LS step benefits)
 
 ---
@@ -925,8 +925,8 @@ Files modified: `mggptestePYTHONCUDA/src/mggp.py`, `mggptestePYTHONCUDA/src/base
 
 File changed: `mggptesteMATLAB/src/evoluir.m` (the local copy, not the main repo's `src/`).
 
-- [ ] Add `'usarGpu', false` to `aplicarDefaults` in `evoluir.m`
-- [ ] In `avaliarIndividuo` local function: add branch
+- [x] Add `'usarGpu', false` to `aplicarDefaults` in `evoluir.m`
+- [x] In `avaliarIndividuo` local function: add branch
   ```matlab
   if config.usarGpu
       [theta, ~, ~] = lsGpu(vars, model.compile(), model.maiorAtraso());
@@ -934,9 +934,9 @@ File changed: `mggptesteMATLAB/src/evoluir.m` (the local copy, not the main repo
       [theta, ~, ~] = ls(vars, model.compile(), model.maiorAtraso());
   end
   ```
-- [ ] Add guard: if `config.usarGpu && config.usarParfor`, error with message
+- [x] Add guard: if `config.usarGpu && config.usarParfor`, error with message
   "usarGpu e usarParfor nao podem ser ativos ao mesmo tempo — parfor workers nao compartilham contexto GPU"
-- [ ] Update `mggptesteMATLAB/bench_matlab.m`: add commented-out GPU config block
+- [x] Update `mggptesteMATLAB/bench_matlab.m`: add commented-out GPU config block
   ```matlab
   % Para rodar em modo GPU (exige CUDA + PCT):
   % config.usarParfor = false;
@@ -979,8 +979,8 @@ File changed: `mggptesteMATLAB/src/evoluir.m` (the local copy, not the main repo
 
 ## G5-5. Add to repo
 
-- [ ] Copy `mggptestePYTHONCUDA/` into `D:\ProjetosPessoais\MGGP_Vmatlab\mggptestePYTHONCUDA\`
-- [ ] Update `.gitignore` to add `mggptestePYTHONCUDA/resultados/*` pattern
+- [x] Copy `mggptestePYTHONCUDA/` into `D:\ProjetosPessoais\MGGP_Vmatlab\mggptestePYTHONCUDA\`
+- [x] Update `.gitignore` to add `mggptestePYTHONCUDA/resultados/*` pattern
 - [ ] Stage and commit: `feat: add Python CUDA benchmark package + MATLAB GPU integration`
 - [ ] Push to `origin/main`
 
